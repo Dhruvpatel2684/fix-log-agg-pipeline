@@ -3,6 +3,12 @@
 # Weekly certificate rotation audit reconciliation
 set -euo pipefail
 
+LOCKFILE=/var/run/cert-audit.lock
+if [[ -f "$LOCKFILE" ]]; then
+  echo "cert-reconcile: another instance is already running (lock: $LOCKFILE)" >&2
+  exit 2
+fi
+
 CONFIG=/etc/cert-audit/audit.conf
 # shellcheck source=/dev/null
 source "$CONFIG"
@@ -61,11 +67,14 @@ seen_events: set = set()
 stats: dict = {}
 
 with open(events_path, "r") as fh:
-    for line in fh:
+    for lineno, line in enumerate(fh, 1):
         line = line.strip()
         if not line:
             continue
-        evt = json.loads(line)
+        try:
+            evt = json.loads(line)
+        except json.JSONDecodeError as e:
+            sys.exit(f"rotation-events.jsonl:{lineno}: malformed JSON: {e}")
         event_id = evt["event_id"]
         if event_id in seen_events:
             continue

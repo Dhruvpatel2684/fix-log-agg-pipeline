@@ -9,3 +9,4 @@
 {"event_id": "EVT008", "cert_fingerprint": "CF02", "action": "rotate", "lag_hours": 24.0, "status": "success", "timestamp": "2026-05-18T04:20:00Z"}
 {"event_id": "EVT009", "cert_fingerprint": "CF03", "action": "rotate", "lag_hours": 3.0, "status": "success", "timestamp": "2026-05-18T04:25:00Z"}
 {"event_id": "EVT010", "cert_fingerprint": "CF01", "action": "rotate", "lag_hours": 6.0, "status": "failed", "timestamp": "2026-05-18T04:30:00Z"}
+{"event_id": "EVT011", "cert_fingerprint": "CF02", "action": "rotate", "lag_ho

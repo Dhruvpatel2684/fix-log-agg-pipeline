@@ -25,6 +25,7 @@ CONFIG = Path("/etc/cert-audit/audit.conf")
 LOADER = Path("/opt/cert-audit/bin/cert-env-loader.sh")
 EVENTS = Path("/opt/cert-audit/data/input/rotation-events.jsonl")
 CERTS = Path("/opt/cert-audit/data/input/cluster-certs.json")
+LOCKFILE = Path("/var/run/cert-audit.lock")
 EXCLUDED_NS = "decommissioned"
 EXPECTED_ROWS = 3
 EXPECTED_HEADER = "cert_fingerprint\tcommon_name\trotation_count\tavg_lag_hours\tcompliance_pct"
@@ -56,7 +57,10 @@ def _expected_rows_from_inputs() -> list[tuple[str, str, str, str, str]]:
             line = line.strip()
             if not line:
                 continue
-            evt = json.loads(line)
+            try:
+                evt = json.loads(line)
+            except json.JSONDecodeError:
+                continue
             event_id = evt["event_id"]
             if event_id in seen:
                 continue
@@ -88,6 +92,27 @@ def _expected_rows_from_inputs() -> list[tuple[str, str, str, str, str]]:
 def test_schema_file_exists() -> None:
     """Environment must ship the audit schema contract referenced in the task description."""
     assert SCHEMA.is_file(), "missing /opt/cert-audit/audit-schema.json"
+
+
+def test_lockfile_absent() -> None:
+    """Stale coordination lock must be removed before the pipeline can run."""
+    assert not LOCKFILE.exists(), \
+        f"stale lock file {LOCKFILE} still present — pipeline will refuse to start"
+
+
+def test_input_data_valid_json() -> None:
+    """Every non-empty line in rotation-events.jsonl must be parseable JSON."""
+    with EVENTS.open(encoding="utf-8") as fh:
+        for lineno, line in enumerate(fh, 1):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                json.loads(line)
+            except json.JSONDecodeError as e:
+                raise AssertionError(
+                    f"rotation-events.jsonl:{lineno}: malformed JSON — {e}"
+                )
 
 
 def test_config_rotation_scope_active() -> None:
@@ -131,10 +156,8 @@ def test_evidence_dir_no_restrictive_acl() -> None:
         capture_output=True, text=True, check=False,
     )
     if result.returncode == 0:
-        # After setfacl -b, there should be no ACL entries that restrict owner write
         for line in result.stdout.splitlines():
             stripped = line.strip()
-            # Check owner line — must include 'w'
             if stripped.startswith("user::"):
                 perms = stripped.split("::")[1]
                 assert "w" in perms, \
