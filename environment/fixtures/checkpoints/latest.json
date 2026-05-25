@@ -1,0 +1,10 @@
+{
+  "last_seq_id": 10,
+  "last_timestamp": 1006.0,
+  "segments_processed": [
+    "segment_001"
+  ],
+  "partial_segment_id": "segment_003",
+  "partial_offset": 3,
+  "dedup_window_state": {}
+}

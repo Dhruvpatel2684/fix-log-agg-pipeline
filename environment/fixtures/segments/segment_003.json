@@ -1,0 +1,64 @@
+{
+  "segment_id": "segment_003",
+  "source_id": "node-gamma",
+  "entries": [
+    {
+      "seq_id": 17,
+      "timestamp": 1008.0,
+      "source_id": "node-gamma",
+      "payload": "metrics flush: 42 datapoints",
+      "checksum": 3632686266
+    },
+    {
+      "seq_id": 18,
+      "timestamp": 1009.5,
+      "source_id": "node-gamma",
+      "payload": "circuit breaker tripped: upstream-svc",
+      "checksum": 2071463313
+    },
+    {
+      "seq_id": 19,
+      "timestamp": 1011.5,
+      "source_id": "node-gamma",
+      "payload": "retry backoff: attempt 3 of 5",
+      "checksum": 2501571480
+    },
+    {
+      "seq_id": 20,
+      "timestamp": 1013.5,
+      "source_id": "node-gamma",
+      "payload": "upstream recovered: latency 45ms",
+      "checksum": 3581155072
+    },
+    {
+      "seq_id": 21,
+      "timestamp": 1015.0,
+      "source_id": "node-gamma",
+      "payload": "batch commit: 89 records flushed",
+      "checksum": 1837978698
+    },
+    {
+      "seq_id": 22,
+      "timestamp": 1016.0,
+      "source_id": "node-gamma",
+      "payload": "tombstone emitted for key usr:7291",
+      "checksum": 643667501
+    },
+    {
+      "seq_id": 23,
+      "timestamp": 1017.0,
+      "source_id": "node-gamma",
+      "payload": "compaction merge: 3 segments -> 1",
+      "checksum": 4235402957
+    },
+    {
+      "seq_id": 24,
+      "timestamp": 1018.0,
+      "source_id": "node-gamma",
+      "payload": "segment seal: checksum verified",
+      "checksum": 3011744062
+    }
+  ],
+  "created_at": 1008.0,
+  "closed": true
+}
