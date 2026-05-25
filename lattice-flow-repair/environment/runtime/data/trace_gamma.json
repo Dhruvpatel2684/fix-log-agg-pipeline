@@ -1,0 +1,26 @@
+{
+  "description": "Branch inside loop - tests interaction of merge and widening",
+  "initial_vars": {
+    "x": 0,
+    "accum": 0
+  },
+  "instructions": [],
+  "loops": [
+    {
+      "modified_vars": ["x", "accum"],
+      "narrowing_passes": 3,
+      "body": [
+        {"op": "add", "target": "x", "left": "x", "right": {"lo": 1, "hi": 2}},
+        {
+          "op": "branch",
+          "then_block": [
+            {"op": "add", "target": "accum", "left": "accum", "right": {"lo": 1, "hi": 5}}
+          ],
+          "else_block": [
+            {"op": "sub", "target": "accum", "left": "accum", "right": {"lo": 0, "hi": 2}}
+          ]
+        }
+      ]
+    }
+  ]
+}

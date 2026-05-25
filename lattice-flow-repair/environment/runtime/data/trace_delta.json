@@ -1,0 +1,32 @@
+{
+  "description": "Nested branches with multiple merges - tests soundness of over-approximation",
+  "initial_vars": {
+    "a": {"lo": -10, "hi": 10},
+    "b": {"lo": 0, "hi": 20},
+    "c": 5
+  },
+  "instructions": [
+    {
+      "op": "branch",
+      "then_block": [
+        {"op": "add", "target": "a", "left": "a", "right": {"lo": 5, "hi": 10}},
+        {
+          "op": "branch",
+          "then_block": [
+            {"op": "assign", "target": "c", "value": {"lo": 0, "hi": 3}}
+          ],
+          "else_block": [
+            {"op": "assign", "target": "c", "value": {"lo": 7, "hi": 15}}
+          ]
+        }
+      ],
+      "else_block": [
+        {"op": "sub", "target": "a", "left": "a", "right": {"lo": 3, "hi": 8}},
+        {"op": "assign", "target": "c", "value": {"lo": -2, "hi": 4}}
+      ]
+    },
+    {"op": "add", "target": "total", "left": "a", "right": "c"},
+    {"op": "mul", "target": "product", "left": "b", "right": "c"}
+  ],
+  "loops": []
+}

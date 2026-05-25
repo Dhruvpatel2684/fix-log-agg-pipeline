@@ -1,134 +1,224 @@
+"""
+Tests for abstract interval analysis system.
+
+Validates that the interval domain correctly computes over-approximations
+of program traces including branch merges, loop fixed points, and
+nested control flow.
+"""
+
 import json
 import os
-import pytest
 
 
 OUTPUT_DIR = "/app/runtime/output"
 
 
 def load_results():
-    path = os.path.join(OUTPUT_DIR, "schedule_analysis.json")
-    with open(path) as f:
+    with open(os.path.join(OUTPUT_DIR, "analysis_results.json")) as f:
         return json.load(f)
 
 
 def load_summary():
-    path = os.path.join(OUTPUT_DIR, "summary.json")
-    with open(path) as f:
+    with open(os.path.join(OUTPUT_DIR, "summary.json")) as f:
         return json.load(f)
 
 
 class TestOutputGeneration:
+    """Basic structural tests that always pass."""
 
     def test_analysis_output_exists(self):
-        path = os.path.join(OUTPUT_DIR, "schedule_analysis.json")
-        assert os.path.isfile(path), "expected analysis output to be generated"
+        """Analysis results file must be generated."""
+        assert os.path.isfile(os.path.join(OUTPUT_DIR, "analysis_results.json"))
 
     def test_summary_output_exists(self):
-        path = os.path.join(OUTPUT_DIR, "summary.json")
-        assert os.path.isfile(path), "expected summary output to be generated"
+        """Summary file must be generated."""
+        assert os.path.isfile(os.path.join(OUTPUT_DIR, "summary.json"))
 
-    def test_total_scenarios_processed(self):
+    def test_all_traces_processed(self):
+        """All four traces must be processed."""
         summary = load_summary()
-        assert summary["total_scenarios"] == 4, (
-            f"expected 4 scenarios processed, got {summary['total_scenarios']}"
+        assert summary["total_traces"] == 4
+
+    def test_beta_counter_lower_bound(self):
+        """Loop counter must start from 0."""
+        results = load_results()
+        counter = results["trace_beta"]["variables"]["counter"]
+        assert counter["lo"] == 0
+
+    def test_beta_sum_lower_bound(self):
+        """Loop sum must start from 0."""
+        results = load_results()
+        s = results["trace_beta"]["variables"]["sum"]
+        assert s["lo"] == 0
+
+
+class TestBranchMergeSoundness:
+    """Tests that verify sound over-approximation at branch merge points.
+
+    Abstract interpretation must produce a SOUND over-approximation:
+    the abstract result must contain ALL possible concrete values.
+    At a branch merge, values from EITHER path could occur, so the
+    abstract value must encompass both branches.
+    """
+
+    def test_alpha_x_lower_bound(self):
+        """Variable x after branch must include values from the else-path.
+
+        The else-branch subtracts [1,4] from initial x=[0,10], giving
+        values as low as -4. The merged result must include this.
+        """
+        results = load_results()
+        x = results["trace_alpha"]["variables"]["x"]
+        assert x["type"] == "interval"
+        assert x["lo"] == -4, (
+            f"expected x lower bound -4 after branch merge, got {x['lo']}"
+        )
+
+    def test_alpha_x_upper_bound(self):
+        """Variable x after branch must include values from the then-path.
+
+        The then-branch adds [2,3] to initial x=[0,10], giving values
+        up to 13. The merged result must include this.
+        """
+        results = load_results()
+        x = results["trace_alpha"]["variables"]["x"]
+        assert x["hi"] == 13, (
+            f"expected x upper bound 13 after branch merge, got {x['hi']}"
+        )
+
+    def test_alpha_z_not_bottom(self):
+        """Variable z must not be empty after branch merge.
+
+        Both branches assign a value to z, so z must be a non-empty
+        interval after the merge point.
+        """
+        results = load_results()
+        z = results["trace_alpha"]["variables"]["z"]
+        assert z["type"] == "interval", (
+            f"expected z to be a non-empty interval after merge, got {z['type']}"
+        )
+
+    def test_alpha_z_lower_bound(self):
+        """Variable z must include the minimum value from either branch."""
+        results = load_results()
+        z = results["trace_alpha"]["variables"]["z"]
+        assert z["lo"] == -5, (
+            f"expected z lower bound -5, got {z['lo']}"
+        )
+
+    def test_alpha_z_upper_bound(self):
+        """Variable z must include the maximum value from either branch."""
+        results = load_results()
+        z = results["trace_alpha"]["variables"]["z"]
+        assert z["hi"] == 20, (
+            f"expected z upper bound 20, got {z['hi']}"
+        )
+
+    def test_alpha_result_not_bottom(self):
+        """The computed result must be a valid interval, not empty."""
+        results = load_results()
+        r = results["trace_alpha"]["variables"]["result"]
+        assert r["type"] == "interval", (
+            f"expected result to be an interval, got {r['type']}"
+        )
+
+    def test_alpha_result_bounds(self):
+        """Result = x + z must reflect the full range of both operands."""
+        results = load_results()
+        r = results["trace_alpha"]["variables"]["result"]
+        assert r["lo"] == -9, (
+            f"expected result lower bound -9, got {r['lo']}"
+        )
+        assert r["hi"] == 33, (
+            f"expected result upper bound 33, got {r['hi']}"
         )
 
 
-class TestSatisfiabilityResults:
+class TestNestedBranchSoundness:
+    """Tests for nested branch merge correctness."""
 
-    def test_delta_unsatisfiable(self):
+    def test_delta_a_lower_bound(self):
+        """Variable a must reflect values from both outer branches."""
         results = load_results()
-        assert results["delta"]["satisfiable"] is False, (
-            "expected satisfiable=false for scenario delta"
+        a = results["trace_delta"]["variables"]["a"]
+        assert a["lo"] == -18, (
+            f"expected a lower bound -18, got {a['lo']}"
         )
 
-    def test_alpha_satisfiable(self):
+    def test_delta_a_upper_bound(self):
+        """Variable a must include values up to 20."""
         results = load_results()
-        assert results["alpha"]["satisfiable"] is True, (
-            "expected satisfiable=true for scenario alpha, got false"
+        a = results["trace_delta"]["variables"]["a"]
+        assert a["hi"] == 20, (
+            f"expected a upper bound 20, got {a['hi']}"
         )
 
-    def test_beta_satisfiable(self):
+    def test_delta_c_includes_nested_then(self):
+        """Variable c must include values from the nested then-branch [0,3]."""
         results = load_results()
-        assert results["beta"]["satisfiable"] is True, (
-            "expected satisfiable=true for scenario beta, got false"
+        c = results["trace_delta"]["variables"]["c"]
+        assert c["type"] == "interval"
+        assert c["lo"] <= 0, (
+            f"expected c lower bound <= 0, got {c['lo']}"
         )
 
-    def test_gamma_satisfiable(self):
+    def test_delta_c_includes_nested_else(self):
+        """Variable c must include values from the nested else-branch [7,15]."""
         results = load_results()
-        assert results["gamma"]["satisfiable"] is True, (
-            "expected satisfiable=true for scenario gamma, got false"
+        c = results["trace_delta"]["variables"]["c"]
+        assert c["hi"] >= 15, (
+            f"expected c upper bound >= 15, got {c['hi']}"
         )
 
-
-class TestPropagatedBounds:
-
-    def test_alpha_build_latest_end(self):
+    def test_delta_total_bounds(self):
+        """Total = a + c must reflect combined ranges."""
         results = load_results()
-        bounds = results["alpha"]["propagated_bounds"]
-        assert bounds["build"]["latest_end"] == 10, (
-            f"expected build latest_end=10 for alpha, got {bounds['build']['latest_end']}"
+        t = results["trace_delta"]["variables"]["total"]
+        assert t["lo"] == -20, (
+            f"expected total lower bound -20, got {t['lo']}"
+        )
+        assert t["hi"] == 35, (
+            f"expected total upper bound 35, got {t['hi']}"
         )
 
-    def test_beta_integration_earliest_start(self):
+    def test_delta_product_upper_bound(self):
+        """Product = b * c must account for max(c) = 15."""
         results = load_results()
-        bounds = results["beta"]["propagated_bounds"]
-        assert bounds["integration"]["earliest_start"] == 15, (
-            f"expected integration earliest_start=15 for beta, "
-            f"got {bounds['integration']['earliest_start']}"
-        )
-
-    def test_beta_release_earliest_start(self):
-        results = load_results()
-        bounds = results["beta"]["propagated_bounds"]
-        assert bounds["release"]["earliest_start"] == 21, (
-            f"expected release earliest_start=21 for beta, "
-            f"got {bounds['release']['earliest_start']}"
-        )
-
-    def test_gamma_phase3_earliest_start(self):
-        results = load_results()
-        bounds = results["gamma"]["propagated_bounds"]
-        assert bounds["phase3"]["earliest_start"] == 18, (
-            f"expected phase3 earliest_start=18 for gamma, "
-            f"got {bounds['phase3']['earliest_start']}"
-        )
-
-    def test_gamma_review_earliest_start(self):
-        results = load_results()
-        bounds = results["gamma"]["propagated_bounds"]
-        assert bounds["review"]["earliest_start"] == 23, (
-            f"expected review earliest_start=23 for gamma, "
-            f"got {bounds['review']['earliest_start']}"
-        )
-
-    def test_gamma_phase2_earliest_start(self):
-        results = load_results()
-        bounds = results["gamma"]["propagated_bounds"]
-        assert bounds["phase2"]["earliest_start"] == 10, (
-            f"expected phase2 earliest_start=10 for gamma, "
-            f"got {bounds['phase2']['earliest_start']}"
+        p = results["trace_delta"]["variables"]["product"]
+        assert p["hi"] == 300, (
+            f"expected product upper bound 300, got {p['hi']}"
         )
 
 
-class TestConstraintDetails:
+class TestLoopBranchInteraction:
+    """Tests for branches inside loops."""
 
-    def test_alpha_no_violated_constraints(self):
+    def test_gamma_accum_not_singleton(self):
+        """Accumulator in loop with branch must not be stuck at initial value.
+
+        A loop body that can both increase and decrease a value via
+        branching must produce a non-trivial interval for the accumulator.
+        """
         results = load_results()
-        violated = results["alpha"]["violated_constraints"]
-        assert len(violated) == 0, (
-            f"expected no violated constraints for alpha, got {len(violated)}"
+        accum = results["trace_gamma"]["variables"]["accum"]
+        assert accum["type"] == "interval"
+        is_trivial = (accum.get("lo") == 0 and accum.get("hi") == 0)
+        assert not is_trivial, (
+            "expected accum to be a non-trivial interval after loop with "
+            "branching increment/decrement, but got [0,0]"
         )
 
-    def test_beta_all_constraints_satisfied(self):
-        results = load_results()
-        assert results["beta"]["constraints_satisfied"] is True, (
-            "expected all constraints satisfied for beta"
-        )
+    def test_gamma_accum_unbounded(self):
+        """Accumulator must be unbounded after widening with divergent branch.
 
-    def test_delta_has_infeasible_tasks(self):
+        Since the loop body can increment accum (then-branch) or decrement
+        it (else-branch), the abstract iteration should widen to [-inf, +inf].
+        """
         results = load_results()
-        assert len(results["delta"]["infeasible_tasks"]) > 0, (
-            "expected infeasible tasks for delta"
+        accum = results["trace_gamma"]["variables"]["accum"]
+        assert accum.get("lo") is None or accum["lo"] <= -100, (
+            f"expected accum lower bound to be unbounded, got {accum.get('lo')}"
+        )
+        assert accum.get("hi") is None or accum["hi"] >= 100, (
+            f"expected accum upper bound to be unbounded, got {accum.get('hi')}"
         )

@@ -1,8 +1,8 @@
-# Temporal Constraint Propagation Scheduler — Debugging Task
+# Abstract Interval Analysis System — Debugging Task
 
 ## Overview
 
-A temporal analysis system determines whether proposed task schedules are satisfiable under ordering constraints. Each task has a feasible time window and a fixed duration. Ordering constraints specify that one task must complete before another begins. The system propagates constraints, checks feasibility, and reports satisfiability.
+A static analysis system computes abstract interval approximations of program variables by interpreting structured execution traces over an interval domain. The system handles sequential assignments, conditional branches, and loops with widening for termination guarantees.
 
 ## System Environment
 
@@ -11,113 +11,85 @@ A temporal analysis system determines whether proposed task schedules are satisf
 - **Global system-wide tooling**: `uv` and `pytest` are available
 - **No external dependencies**: stdlib only
 
-## Processing Stages
+## Architecture
 
-1. **Constraint Propagation** — Iteratively tightens the feasible windows for each task based on ordering relationships. If task A must complete before task B begins, then A's completion time bounds B's start, and B's start bounds A's completion. Propagation runs for multiple passes until bounds converge.
+The system processes program traces through the following stages:
 
-2. **Feasibility Check** — After propagation, verifies that every task still has a non-empty feasible window (earliest start does not exceed latest start). Tasks with empty windows are reported as infeasible.
+1. **Initialization** — Variable bounds are set from trace specifications.
 
-3. **Satisfiability Assessment** — Checks whether the propagated bounds admit an assignment where all ordering constraints are respected simultaneously. Reports which constraints are violated, if any.
+2. **Sequential Transfer** — Arithmetic operations (add, sub, mul) are applied using interval arithmetic transfer functions.
 
-## Task Representation
+3. **Branch Processing** — Conditional branches split execution into then/else paths. Each path is analyzed independently. At the merge point after the branch, the abstract state must soundly represent all values that could result from either path.
 
-Each task has:
-- `earliest_start` — the earliest time the task can begin
-- `latest_start` — the latest time the task can begin
-- `duration` — fixed execution time
+4. **Loop Analysis** — Loops are analyzed using Kleene iteration with widening. The loop body is repeatedly applied until a post-fixed point is reached. Widening accelerates convergence by extrapolating unstable bounds to infinity. Narrowing then refines the over-approximation.
 
-Derived bounds:
-- `earliest_end = earliest_start + duration`
-- `latest_end = latest_start + duration`
+5. **Reporting** — Final abstract values for all variables are written as structured JSON.
 
-Tasks occupy the half-open time interval `[start, start + duration)`.
+## Abstract Domain
 
-## Constraint Semantics
+The interval domain represents sets of integers as closed intervals `[lo, hi]`. Special elements:
+- **Bottom** (⊥): the empty set — represents unreachable states
+- **Top** (⊤): all integers — `[-∞, +∞]`
 
-A constraint `{"type": "before", "from": "A", "to": "B"}` means task A must complete before task B begins. For half-open intervals, A finishing at exactly time T and B starting at time T means they do not overlap (A occupies `[..., T)` and B occupies `[T, ...)`).
+The domain forms a complete lattice ordered by subset inclusion.
 
-## Scenarios
+## Soundness Requirement
 
-Four scheduling scenarios are evaluated (configured in `/app/runtime/config.ini`):
-- **alpha** — Linear task chain with tight intervals
-- **beta** — Parallel tasks feeding into a shared successor
-- **gamma** — Cascading phases with indirect dependency propagation
-- **delta** — Transitive chain with impossible time constraints
+The analysis must produce a **sound over-approximation**: the abstract interval for each variable must CONTAIN every concrete value that could occur during any actual execution of the trace. Under-approximation (missing possible values) is unsound and constitutes a correctness defect.
 
 ## Problem
 
-The system runs without errors but produces incorrect satisfiability results. Scenarios that should be satisfiable are reported as unsatisfiable. Propagated bounds appear over-tightened, and constraint checking seems overly strict at interval boundaries.
+The system runs without errors but produces intervals that are too narrow in traces involving conditional branches. Some variables that should have wide ranges are being computed with restricted bounds, and some variables that should be non-empty intervals are being reported as bottom (empty). The analysis appears to under-approximate rather than over-approximate at certain program points.
 
 ## Expected Correct Output
 
-When functioning correctly:
-- **alpha**: `satisfiable = true` (all constraints met with zero separation at boundary)
-- **beta**: `satisfiable = true` (parallel predecessors complete before successor)
-- **gamma**: `satisfiable = true` (cascading constraints fully propagated)
-- **delta**: `satisfiable = false` (genuinely impossible — task durations exceed available time)
+The analysis should produce sound over-approximations for all traces:
+- **trace_alpha**: After a branch where x is increased on one path and decreased on the other, x must span the full range of both paths
+- **trace_beta**: Loop variables must widen to reflect unbounded iteration
+- **trace_gamma**: A loop containing a branch that both increments and decrements a variable must produce a wide (unbounded) interval
+- **trace_delta**: Nested branches must propagate ranges from all sub-paths
 
 ## Output Schema
-
-The system produces two output files in `/app/runtime/output/`:
 
 ### `/app/runtime/output/summary.json`
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `total_scenarios` | int | Number of scenarios processed |
-| `satisfiable_count` | int | Scenarios with satisfiable=true |
-| `unsatisfiable_count` | int | Scenarios with satisfiable=false |
-| `scenario_results` | object | Map of scenario_id to boolean satisfiability |
+| `total_traces` | int | Number of traces analyzed |
+| `trace_ids` | array | List of trace identifiers |
+| `variables_per_trace` | object | Map of trace_id to list of variable names |
 
-### `/app/runtime/output/schedule_analysis.json`
+### `/app/runtime/output/analysis_results.json`
 
-Top-level object keyed by scenario_id. Each scenario entry contains:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `scenario_id` | string | Identifier for the scenario |
-| `satisfiable` | boolean | Whether the schedule is satisfiable |
-| `feasible_windows` | boolean | Whether all task windows are non-empty after propagation |
-| `infeasible_tasks` | array | List of task names with empty windows |
-| `constraints_satisfied` | boolean | Whether all ordering constraints are met |
-| `violated_constraints` | array | List of constraint strings that are violated |
-| `constraint_details` | array | Per-constraint satisfaction details |
-| `propagated_bounds` | object | Map of task name to propagated timing bounds |
-
-Each entry in `propagated_bounds` contains:
+Top-level object keyed by trace_id. Each entry contains:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `earliest_start` | int | Tightened earliest start time |
-| `latest_start` | int | Tightened latest start time |
-| `duration` | int | Fixed task duration |
-| `earliest_end` | int | Tightened earliest end time |
-| `latest_end` | int | Tightened latest end time |
+| `trace_id` | string | Trace identifier |
+| `description` | string | Human-readable trace description |
+| `variables` | object | Map of variable name to abstract interval |
 
-Each entry in `constraint_details` contains:
+Each variable entry in `variables`:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `constraint` | string | Human-readable constraint description |
-| `pred_earliest_end` | int | Predecessor's earliest end after propagation |
-| `succ_latest_start` | int | Successor's latest start after propagation |
-| `separation` | int | Temporal gap between predecessor end and successor start |
-| `satisfied` | boolean | Whether this individual constraint is met |
+| `type` | string | Either "interval" or "bottom" |
+| `lo` | int or null | Lower bound (null = -∞), absent if bottom |
+| `hi` | int or null | Upper bound (null = +∞), absent if bottom |
 
 ## Key Files
 
 | File | Purpose |
 |------|---------|
-| `/app/runtime/run_analysis.py` | Entry point orchestrating all stages |
-| `/app/runtime/intervals.py` | Temporal interval operations (overlap, separation, bounds) |
-| `/app/runtime/propagator.py` | Constraint propagation engine |
-| `/app/runtime/checker.py` | Satisfiability assessment |
-| `/app/runtime/config.ini` | Scheduler parameters and active scenarios |
-| `/app/runtime/data/alpha_scenario.json` | Alpha scenario definition |
-| `/app/runtime/data/beta_scenario.json` | Beta scenario definition |
-| `/app/runtime/data/gamma_scenario.json` | Gamma scenario definition |
-| `/app/runtime/data/delta_scenario.json` | Delta scenario definition |
+| `/app/runtime/run_analysis.py` | Entry point — loads traces, runs analyzer, writes output |
+| `/app/runtime/domain.py` | Interval domain — lattice operations, transfer functions, merge |
+| `/app/runtime/analyzer.py` | Trace analyzer — processes instructions, branches, loops |
+| `/app/runtime/config.ini` | Analysis parameters (widening delay, max iterations) |
+| `/app/runtime/data/trace_alpha.json` | Simple branch merge trace |
+| `/app/runtime/data/trace_beta.json` | Loop with widening trace |
+| `/app/runtime/data/trace_gamma.json` | Branch inside loop trace |
+| `/app/runtime/data/trace_delta.json` | Nested branches trace |
 
 ## Your Task
 
-Identify and fix defects in the runtime source files and configuration so that the analysis produces correct satisfiability results. The scenario data files are correct and should not be modified. Focus on the interval operations, propagation logic, and configuration parameters.
+Identify and fix the defect in the runtime source files so that the analysis produces sound over-approximations. The configuration and data files are correct. Focus on the abstract domain operations and how they are used at control flow merge points.

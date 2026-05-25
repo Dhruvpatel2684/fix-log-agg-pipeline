@@ -1,76 +1,48 @@
-"""Repair script for the temporal constraint propagation scheduler."""
+#!/usr/bin/env python3
+"""Repair script for abstract interval analysis system."""
 
-import re
+import sys
 
 
-def patch_intervals():
-    path = "/app/runtime/intervals.py"
+def patch_domain():
+    """Fix the merge operation in the domain module."""
+    path = "/app/runtime/domain.py"
     with open(path, "r") as f:
         content = f.read()
 
+    # The merge logic computes the intersection (tightest consistent interval)
+    # but for sound over-approximation at branch merges, it must compute
+    # the union (widest interval covering both paths).
     content = content.replace(
-        "return end_a >= start_b",
-        "return end_a > start_b"
+        "        # Combine: tightest interval consistent with all predecessors\n"
+        "        new_lo = max(result.lo, state.lo)\n"
+        "        new_hi = min(result.hi, state.hi)\n"
+        "        if new_lo > new_hi:\n"
+        "            result = Interval.bottom()\n"
+        "        else:\n"
+        "            result = Interval(new_lo, new_hi)",
+        "        # Combine: widest interval covering all predecessors\n"
+        "        new_lo = min(result.lo, state.lo)\n"
+        "        new_hi = max(result.hi, state.hi)\n"
+        "        result = Interval(new_lo, new_hi)"
     )
 
     with open(path, "w") as f:
         f.write(content)
 
 
-def patch_propagator():
-    path = "/app/runtime/propagator.py"
-    with open(path, "r") as f:
-        content = f.read()
+def main():
+    patch_domain()
 
-    old_backward = (
-        'new_latest_end = tighten_end_bound(\n'
-        '                        bounds[pred]["latest_end"],\n'
-        '                        bounds[succ]["earliest_start"]\n'
-        '                    )'
-    )
-    new_backward = (
-        'new_latest_end = tighten_end_bound(\n'
-        '                        bounds[pred]["latest_end"],\n'
-        '                        bounds[succ]["latest_start"]\n'
-        '                    )'
-    )
-    content = content.replace(old_backward, new_backward)
+    # Re-run analysis with fixed code
+    sys.path.insert(0, "/app")
+    for key in list(sys.modules.keys()):
+        if key.startswith("runtime"):
+            del sys.modules[key]
 
-    old_forward = (
-        'new_earliest_start = tighten_start_bound(\n'
-        '                        bounds[succ]["earliest_start"],\n'
-        '                        bounds[pred]["latest_end"]\n'
-        '                    )'
-    )
-    new_forward = (
-        'new_earliest_start = tighten_start_bound(\n'
-        '                        bounds[succ]["earliest_start"],\n'
-        '                        bounds[pred]["earliest_end"]\n'
-        '                    )'
-    )
-    content = content.replace(old_forward, new_forward)
-
-    with open(path, "w") as f:
-        f.write(content)
-
-
-def patch_config():
-    path = "/app/runtime/config.ini"
-    with open(path, "r") as f:
-        content = f.read()
-
-    content = re.sub(
-        r"max_propagation_passes\s*=\s*\d+",
-        "max_propagation_passes = 20",
-        content
-    )
-
-    with open(path, "w") as f:
-        f.write(content)
+    from runtime.run_analysis import main as run_main
+    run_main()
 
 
 if __name__ == "__main__":
-    patch_intervals()
-    patch_propagator()
-    patch_config()
-    print("All patches applied successfully.")
+    main()

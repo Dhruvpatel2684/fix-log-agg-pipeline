@@ -1,21 +1,21 @@
 author_name = "Dhruvkumar Patel"
 author_email = "dhruvpatel2284@gmail.com"
-category = "temporal_reasoning"
+category = "static_analysis"
 difficulty = "hard"
-tags = ["constraint-propagation", "temporal-logic", "interval-scheduling", "satisfiability", "bound-tightening"]
+tags = ["abstract-interpretation", "interval-domain", "lattice-theory", "fixed-point", "program-analysis"]
 
-difficulty_explanation = "Requires understanding temporal interval semantics (half-open vs closed boundaries), correct propagation direction for scheduling constraints (earliest-end vs latest-end, earliest-start vs latest-start), and fixpoint convergence requirements — four interacting bugs spread across config and two source files."
-solution_explanation = "Fix 1: Change >= to > in overlap check (half-open intervals don't overlap at boundary). Fix 2: Use succ.latest_start instead of succ.earliest_start for backward tightening. Fix 3: Use pred.earliest_end instead of pred.latest_end for forward tightening. Fix 4: Increase max_propagation_passes from 1 to 20 for fixpoint convergence."
-verification_explanation = "Tests validate satisfiability classification for 4 scenarios, specific propagated bound values, constraint satisfaction details, and identification of infeasible tasks."
-expert_time_estimate_hours = 3.0
+difficulty_explanation = "Requires understanding the distinction between join (least upper bound / over-approximation) and meet (greatest lower bound / under-approximation) in abstract interpretation. The buggy code uses meet at branch merge points, which produces an under-approximation that looks plausible but violates the soundness requirement. The function is named 'merge_states' and its docstring describes combining incoming states without specifying the lattice direction, making the meet vs join confusion non-obvious."
+solution_explanation = "Replace interval_meet with interval_join in the merge_states function. The meet (intersection) computes values common to both branches, but soundness requires the join (union) which captures all values from either branch."
+verification_explanation = "Tests validate that branch merge results contain values from both paths (sound over-approximation), that nested branches propagate full ranges, and that loops with internal branches produce appropriately wide intervals."
+expert_time_estimate_hours = 2.5
 
 [task]
 name = "lattice-flow-repair"
-description = "Fix defects in a temporal constraint propagation scheduler that checks satisfiability of task schedules under ordering constraints by iteratively tightening feasible time windows."
+description = "Fix a soundness defect in an abstract interpretation system where the interval domain produces under-approximations at control flow merge points instead of the required sound over-approximations."
 
 [task.difficulty]
 level = "hard"
-reasoning = "The task requires understanding temporal interval boundary semantics, correct bound references for bidirectional constraint propagation, and fixpoint convergence — four conceptually distinct bugs that interact across scenarios."
+reasoning = "Requires understanding abstract interpretation soundness — specifically that branch merges require the lattice JOIN (least upper bound) for may-analysis, not the MEET (greatest lower bound). Both are valid lattice operations but serve different analysis purposes. The bug is a single conceptual confusion embedded in a 200+ line domain implementation."
 
 [task.runtime]
 entrypoint = "python3 -m runtime.run_analysis"
@@ -24,11 +24,11 @@ dependencies = "stdlib-only"
 
 [task.validator]
 command = "bash tests/test.sh"
-description = "Runs the temporal analysis and validates satisfiability results, propagated bounds, and constraint details."
+description = "Runs interval analysis on four traces and validates that branch merges produce sound over-approximations."
 
 [task.repair]
 command = "bash solution/solve.sh"
-description = "Patches intervals.py, propagator.py, and config.ini to fix overlap semantics, propagation bounds, and pass count, then re-runs analysis."
+description = "Patches domain.py to use interval_join instead of interval_meet at merge points, then re-runs analysis."
 
 [task.resources]
 timeout = 300

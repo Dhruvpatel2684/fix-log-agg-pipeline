@@ -1,0 +1,23 @@
+{
+  "description": "Simple branch merge - tests control flow join semantics",
+  "initial_vars": {
+    "x": {"lo": 0, "hi": 10},
+    "y": {"lo": 5, "hi": 15},
+    "z": 0
+  },
+  "instructions": [
+    {
+      "op": "branch",
+      "then_block": [
+        {"op": "add", "target": "x", "left": "x", "right": {"lo": 2, "hi": 3}},
+        {"op": "assign", "target": "z", "value": {"lo": 10, "hi": 20}}
+      ],
+      "else_block": [
+        {"op": "sub", "target": "x", "left": "x", "right": {"lo": 1, "hi": 4}},
+        {"op": "assign", "target": "z", "value": {"lo": -5, "hi": 5}}
+      ]
+    },
+    {"op": "add", "target": "result", "left": "x", "right": "z"}
+  ],
+  "loops": []
+}

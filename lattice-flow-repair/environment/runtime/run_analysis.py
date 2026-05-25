@@ -1,37 +1,21 @@
 """
-Entry point for the temporal schedule analysis system.
+Entry point for abstract interpretation analysis.
 
-Orchestrates scenario loading, constraint propagation, satisfiability
-checking, and report generation for each configured scheduling scenario.
+Loads program trace specifications, runs the interval domain
+analyzer on each, and produces structured output reports.
 """
 
 import json
 import os
 import sys
 import configparser
-from typing import List, Dict
 
 sys.path.insert(0, "/app")
 
-from runtime.propagator import ConstraintPropagator
-from runtime.checker import SatisfiabilityChecker
-
-
-def load_scenarios(data_dir: str, active: List[str]) -> List[Dict]:
-    """Load scenario files matching active list."""
-    scenarios = []
-    for filename in sorted(os.listdir(data_dir)):
-        if not filename.endswith("_scenario.json"):
-            continue
-        with open(os.path.join(data_dir, filename)) as f:
-            scenario = json.load(f)
-        if scenario["scenario_id"] in active:
-            scenarios.append(scenario)
-    return scenarios
+from runtime.analyzer import TraceAnalyzer
 
 
 def main():
-    """Run temporal schedule analysis for all configured scenarios."""
     config_path = "/app/runtime/config.ini"
     data_dir = "/app/runtime/data"
 
@@ -39,57 +23,46 @@ def main():
     config.read(config_path)
 
     output_dir = config.get("analysis", "output_dir")
-    active_list = [s.strip() for s in config.get("analysis", "active_scenarios").split(",")]
+    active_traces = [t.strip() for t in config.get("analysis", "active_traces").split(",")]
 
     os.makedirs(output_dir, exist_ok=True)
 
-    propagator = ConstraintPropagator(config_path)
-    checker = SatisfiabilityChecker()
-
-    scenarios = load_scenarios(data_dir, active_list)
+    analyzer = TraceAnalyzer(config_path)
 
     results = {}
-    for scenario in scenarios:
-        sid = scenario["scenario_id"]
-        tasks = scenario["tasks"]
-        constraints = scenario["constraints"]
+    for trace_name in active_traces:
+        trace_path = os.path.join(data_dir, f"{trace_name}.json")
+        if not os.path.exists(trace_path):
+            continue
+        with open(trace_path) as f:
+            trace = json.load(f)
+        result = analyzer.analyze_trace(trace)
+        results[trace_name] = {
+            "trace_id": trace_name,
+            "description": trace.get("description", ""),
+            "variables": result
+        }
 
-        # Propagate constraints
-        bounds = propagator.propagate(tasks, constraints)
-
-        # Check feasibility
-        feasible, infeasible_tasks = propagator.check_feasibility(bounds)
-
-        # Check ordering constraints
-        constraint_results = checker.check_ordering_constraints(bounds, constraints)
-
-        # Determine overall satisfiability
-        result = checker.overall_satisfiability(feasible, infeasible_tasks, constraint_results)
-        result["scenario_id"] = sid
-        result["propagated_bounds"] = bounds
-
-        results[sid] = result
-
-    # Write results
-    output_path = os.path.join(output_dir, "schedule_analysis.json")
-    with open(output_path, "w") as f:
+    # Write detailed results
+    analysis_path = os.path.join(output_dir, "analysis_results.json")
+    with open(analysis_path, "w") as f:
         json.dump(results, f, indent=2)
 
     # Write summary
     summary = {
-        "total_scenarios": len(scenarios),
-        "satisfiable_count": sum(1 for r in results.values() if r["satisfiable"]),
-        "unsatisfiable_count": sum(1 for r in results.values() if not r["satisfiable"]),
-        "scenario_results": {sid: r["satisfiable"] for sid, r in results.items()}
+        "total_traces": len(results),
+        "trace_ids": list(results.keys()),
+        "variables_per_trace": {
+            tid: list(r["variables"].keys()) for tid, r in results.items()
+        }
     }
     summary_path = os.path.join(output_dir, "summary.json")
     with open(summary_path, "w") as f:
         json.dump(summary, f, indent=2)
 
     print(f"Analysis complete. Results written to {output_dir}")
-    for sid, r in results.items():
-        status = "satisfiable" if r["satisfiable"] else "UNSATISFIABLE"
-        print(f"  {sid}: {status}")
+    for tid, r in results.items():
+        print(f"  {tid}: {len(r['variables'])} variables analyzed")
 
 
 if __name__ == "__main__":

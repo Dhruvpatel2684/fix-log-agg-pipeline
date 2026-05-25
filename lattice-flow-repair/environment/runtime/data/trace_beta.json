@@ -1,0 +1,18 @@
+{
+  "description": "Loop with widening - tests fixed-point convergence",
+  "initial_vars": {
+    "counter": 0,
+    "sum": 0
+  },
+  "instructions": [],
+  "loops": [
+    {
+      "modified_vars": ["counter", "sum"],
+      "narrowing_passes": 2,
+      "body": [
+        {"op": "add", "target": "counter", "left": "counter", "right": {"lo": 1, "hi": 1}},
+        {"op": "add", "target": "sum", "left": "sum", "right": {"lo": 1, "hi": 3}}
+      ]
+    }
+  ]
+}
