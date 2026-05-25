@@ -2,7 +2,7 @@
 
 ## Overview
 
-A generic type assignability verification system processes type declarations, generic type parameters with variance annotations, and assignment records from multiple source modules. It determines whether each type assignment respects the declared variance of the generic container (covariant, contravariant, or invariant) and resolves type variable constraints within scoped contexts.
+A generic type assignability verification system processes type declarations, generic type parameters with variance annotations, and assignment records from multiple source modules. It determines whether each type assignment respects the declared variance of the generic container (covariant, contravariant, or invariant) and resolves type variable constraints using lattice operations on the type hierarchy.
 
 ## System Environment
 
@@ -17,9 +17,9 @@ A generic type assignability verification system processes type declarations, ge
 
 2. **Type Registration** — Builds a type hierarchy (inheritance tree) and registers generic type declarations with their variance annotations (covariant, contravariant, invariant).
 
-3. **Assignment Checking** — Validates each type assignment record against variance rules. For covariant containers (e.g., Producer, Reader, Supplier), the source type argument must be a subtype of the target type argument. For contravariant containers (e.g., Consumer, Writer, Handler), the direction reverses: the target type argument must be a subtype of the source type argument. For invariant containers, exact type match is required. The recursion depth limit is configured in the `[checker.recursive]` section.
+3. **Assignment Checking** — Validates each type assignment record against declaration-site variance rules. The variance annotation declared on the generic type parameter determines the subtyping direction, regardless of the syntactic position where the assignment occurs. For covariant containers, source_arg must be a subtype of target_arg. For contravariant containers, target_arg must be a subtype of source_arg. For invariant containers, exact type match is required. The recursion depth limit is configured in the `[checker.bounds]` section.
 
-4. **Constraint Resolution** — Collects type variable bounds from constraint records. Each constraint has a scope (global or function-level) and a priority. Within a given scope, when multiple constraints exist for the same type variable, the highest-priority constraint determines the effective bound (last-write-wins semantics).
+4. **Constraint Resolution** — Collects type variable bounds from constraint records. Each constraint has a scope and a priority. Within a scope, when multiple bounds exist for the same type variable, the resolver selects the greatest lower bound (GLB) — the most specific type (deepest in the hierarchy) that is a subtype of all other bounds. This narrows the type variable to its tightest valid binding.
 
 5. **Report Generation** — Produces output files sorted deterministically. When multiple records share the same timestamp, ordering is determined by source_module first, then by sequence number.
 
@@ -27,9 +27,9 @@ A generic type assignability verification system processes type declarations, ge
 
 The system is producing incorrect output across multiple dimensions:
 
-- Some type assignments that should be flagged as violations are being marked valid, and vice versa
+- Some type assignments involving generic types in cross-position usage (e.g., a covariant container passed as a parameter, or a contravariant container used as a return value) are being checked with incorrect variance semantics
 - One source module's records appear to be missing entirely from the output
-- The constraint resolver is producing compound bounds instead of single resolved types
+- The constraint resolver is selecting overly general bounds instead of the most specific ones
 - Output ordering is non-deterministic when records share timestamps across different source modules
 
 ## Expected Correct Output
@@ -37,10 +37,8 @@ The system is producing incorrect output across multiple dimensions:
 When functioning correctly, the system should:
 
 - Process records from ALL four source modules (core_types, collections, io_handlers, functional)
-- Correctly identify covariant violations (e.g., `Producer<Animal>` is NOT assignable to `Producer<Cat>`)
-- Correctly identify contravariant violations (e.g., `Consumer<Cat>` assigned to `Consumer<Animal>` is INVALID because Animal is not a subtype of Cat)
-- Correctly validate contravariant assignments (e.g., `Consumer<Animal>` assigned to `Consumer<Cat>` IS valid because Cat is a subtype of Animal)
-- Resolve each constraint to its single highest-priority bound per scope
+- Apply variance rules based on the DECLARED variance of the generic type, not the assignment context
+- Resolve each constraint scope to its greatest lower bound (most specific type in the hierarchy)
 - Produce deterministic ordering using timestamp, source_module, then sequence number
 
 ## Output Schema
@@ -68,7 +66,7 @@ When functioning correctly, the system should:
 | `resolutions` | list | Array of resolution result objects |
 | `resolutions[].type_var` | str | Type variable name |
 | `resolutions[].scope` | str | Scope where constraint applies |
-| `resolutions[].resolved_bound` | str | The effective type bound (single type name) |
+| `resolutions[].resolved_bound` | str | The effective type bound (most specific type) |
 | `resolutions[].priority` | int | Priority of the winning constraint |
 | `resolutions[].source_module` | str | Module that declared the constraint |
 
@@ -93,7 +91,7 @@ When functioning correctly, the system should:
 | `/app/runtime/config.ini` | Configuration: source modules, depth limits, resolution strategy |
 | `/app/runtime/type_parser.py` | Parses JSONL data files, applies category filtering |
 | `/app/runtime/variance_checker.py` | Implements variance-aware subtype checking |
-| `/app/runtime/constraint_solver.py` | Resolves type variable bounds across scopes |
+| `/app/runtime/constraint_solver.py` | Resolves type variable bounds via lattice operations |
 | `/app/runtime/reporter.py` | Generates structured output reports |
 | `/app/runtime/run_checker.py` | Entry point orchestrating all stages |
 | `/app/runtime/data/core_types.jsonl` | Core type hierarchy and assignments |
@@ -103,4 +101,4 @@ When functioning correctly, the system should:
 
 ## Your Task
 
-Identify and fix defects in the runtime source files under `/app/runtime/`. The system should produce correct output matching the schema and behavioral description above. All four source modules must be processed, variance checking must follow the rules described in Stage 3, constraint resolution must use last-write-wins semantics, and output ordering must be deterministic.
+Identify and fix defects in the runtime source files under `/app/runtime/`. The system should produce correct output matching the schema and behavioral description above. All four source modules must be processed, variance checking must use declaration-site semantics, constraint resolution must select the greatest lower bound, and output ordering must be deterministic.

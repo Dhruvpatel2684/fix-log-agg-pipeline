@@ -1,35 +1,34 @@
 """Constraint solver for type variable bounds.
 
 Collects type constraints from various scopes and resolves type variable
-bounds. Constraints are scoped (global, function-level) and the solver
-determines the effective bound for each type variable at each scope level.
+bounds using lattice operations on the type hierarchy.
 
-Resolution uses priority ordering to determine which constraints take
-precedence when multiple constraints exist for the same type variable.
+When multiple constraints exist for the same type variable within a scope,
+the solver computes the effective bound by selecting the most general type
+that satisfies all constraints (upper bound in the type lattice).
 """
 
 
 class ConstraintSolver:
-    """Resolves type variable constraints within scoped contexts."""
+    """Resolves type variable constraints within scoped contexts using lattice ops."""
 
-    def __init__(self):
-        self._constraints = {}  # scope -> {type_var -> bound_info}
+    def __init__(self, type_hierarchy):
+        self._constraints = {}  # scope -> {type_var -> [bound_records]}
+        self._hierarchy = type_hierarchy  # name -> parent
 
     def collect_constraints(self, records):
         """Collect type constraints from parsed records.
 
-        Groups constraints by scope and type variable. For each scope,
-        tracks the bound and priority of each constraint encountered.
-        Note: seq is local to each stream, so ordering across modules
-        requires the source_module as a secondary key.
+        Groups constraints by scope and type variable. Multiple constraints
+        for the same variable in the same scope are accumulated for
+        lattice-based resolution.
         """
-        # Sort records by priority for deterministic processing
-        sorted_records = sorted(
+        constraint_records = sorted(
             [r for r in records if r.kind == "constraint"],
-            key=lambda r: (r.priority, r.seq),
+            key=lambda r: (r.scope, r.type_var, r.priority),
         )
 
-        for record in sorted_records:
+        for record in constraint_records:
             scope = record.scope
             type_var = record.type_var
 
@@ -37,54 +36,65 @@ class ConstraintSolver:
                 self._constraints[scope] = {}
 
             if type_var not in self._constraints[scope]:
-                self._constraints[scope][type_var] = {
-                    "bound": record.bound,
-                    "priority": record.priority,
-                    "source_module": record.source_module,
-                }
-            else:
-                # Higher priority constraint overrides lower
-                existing = self._constraints[scope][type_var]
-                existing["bound"] += f",{record.bound}"
-                existing["priority"] += record.priority
+                self._constraints[scope][type_var] = []
 
-    def resolve(self, type_var, scope):
-        """Resolve the effective bound for a type variable in a given scope.
+            self._constraints[scope][type_var].append({
+                "bound": record.bound,
+                "priority": record.priority,
+                "source_module": record.source_module,
+            })
 
-        Uses scope-specific constraints if available. The resolved bound
-        is the accumulated result of all constraints in that scope.
+    def _depth_of(self, type_name):
+        """Compute depth of a type in the hierarchy (root = 0)."""
+        depth = 0
+        current = type_name
+        visited = set()
+        while current is not None and current not in visited:
+            visited.add(current)
+            parent = self._hierarchy.get(current)
+            if parent is None:
+                break
+            depth += 1
+            current = parent
+        return depth
+
+    def _resolve_bounds(self, bounds_list):
+        """Resolve multiple bounds to a single effective bound.
+
+        Uses the least upper bound (most general/widest type) that
+        subsumes all constraint bounds. This finds the type closest
+        to the root that all bounds are subtypes of.
         """
-        if scope in self._constraints and type_var in self._constraints[scope]:
-            info = self._constraints[scope][type_var]
-            return {
-                "type_var": type_var,
-                "scope": scope,
-                "resolved_bound": info["bound"],
-                "priority": info["priority"],
-                "source_module": info["source_module"],
-            }
-        # Fall back to global scope
-        if "global" in self._constraints and type_var in self._constraints["global"]:
-            info = self._constraints["global"][type_var]
-            return {
-                "type_var": type_var,
-                "scope": "global",
-                "resolved_bound": info["bound"],
-                "priority": info["priority"],
-                "source_module": info["source_module"],
-            }
-        return None
+        if not bounds_list:
+            return None
+
+        if len(bounds_list) == 1:
+            return bounds_list[0]
+
+        # Find the bound with minimum depth (closest to root = most general)
+        best = bounds_list[0]
+        best_depth = self._depth_of(best["bound"])
+
+        for entry in bounds_list[1:]:
+            d = self._depth_of(entry["bound"])
+            if d < best_depth:
+                best = entry
+                best_depth = d
+
+        return best
 
     def get_all_resolutions(self):
         """Return all resolved constraints across all scopes."""
         results = []
-        for scope, variables in self._constraints.items():
-            for type_var, info in variables.items():
-                results.append({
-                    "type_var": type_var,
-                    "scope": scope,
-                    "resolved_bound": info["bound"],
-                    "priority": info["priority"],
-                    "source_module": info["source_module"],
-                })
+        for scope, variables in sorted(self._constraints.items()):
+            for type_var, bounds_list in sorted(variables.items()):
+                resolved = self._resolve_bounds(bounds_list)
+                if resolved:
+                    results.append({
+                        "type_var": type_var,
+                        "scope": scope,
+                        "resolved_bound": resolved["bound"],
+                        "priority": resolved["priority"],
+                        "source_module": resolved["source_module"],
+                    })
         return results

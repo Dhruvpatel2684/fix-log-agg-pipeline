@@ -18,8 +18,7 @@ class VarianceChecker:
     def __init__(self, config_path):
         self._config = configparser.ConfigParser()
         self._config.read(config_path)
-        # Recursion depth limit for nested type checking
-        self._max_depth = self._config.getint("checker", "max_recursion_depth")
+        self._max_depth = self._config.getint("checker.bounds", "max_recursion_depth")
         self._type_hierarchy = {}  # name -> parent
         self._generic_types = {}  # name -> {"type_param": ..., "variance": ...}
         self._current_depth = 0
@@ -45,6 +44,7 @@ class VarianceChecker:
             return True
         self._current_depth += 1
         if self._current_depth > self._max_depth:
+            self._current_depth -= 1
             return False
         current = sub
         visited = set()
@@ -59,11 +59,12 @@ class VarianceChecker:
         self._current_depth -= 1
         return False
 
-    def check_assignment(self, target_type, source_type):
+    def check_assignment(self, target_type, source_type, context=None):
         """Check if source_type can be assigned to target_type.
 
         For simple types: source must be subtype of target.
-        For generic types: applies variance rules based on declared variance.
+        For generic types: applies variance rules based on the assignment
+        context position to determine subtyping direction.
 
         Returns a dict with 'valid' (bool) and 'reason' (str).
         """
@@ -92,7 +93,7 @@ class VarianceChecker:
 
             variance = generic_info["variance"]
             return self._check_variance_assignability(
-                variance, target_arg, source_arg
+                variance, target_arg, source_arg, context
             )
 
         # Simple type assignment: source must be subtype of target
@@ -103,24 +104,32 @@ class VarianceChecker:
             "reason": f"{source_type} is not a subtype of {target_type}",
         }
 
-    def _check_variance_assignability(self, variance, target_arg, source_arg):
+    def _check_variance_assignability(self, variance, target_arg, source_arg, context):
         """Apply variance-specific assignability rules.
 
-        For covariant (output) positions: source_arg must be subtype of target_arg
-        For contravariant (input) positions: target_arg must be subtype of source_arg
-        For invariant positions: types must be identical
-
-        The subtype direction is determined by the variance of the type parameter
-        in the generic container declaration.
+        Uses the assignment context to determine the variance position.
+        In use-site variance, the position where the type appears (parameter
+        position = input = contravariant, return position = output = covariant)
+        determines the subtyping direction regardless of the declared variance.
         """
         self._current_depth += 1
         if self._current_depth > self._max_depth:
             self._current_depth -= 1
             return {"valid": False, "reason": "max recursion depth exceeded"}
 
-        if variance == "covariant":
-            # Covariant: source arg must be subtype of target arg
-            # e.g., Producer<Cat> assignable to Producer<Animal> because Cat <: Animal
+        # Determine effective variance from the usage context:
+        # parameter positions are input (contravariant direction)
+        # return_value positions are output (covariant direction)
+        # local_bind requires exact match (invariant)
+        if context == "return_value":
+            effective_variance = "covariant"
+        elif context == "parameter":
+            effective_variance = "contravariant"
+        else:
+            effective_variance = "invariant"
+
+        if effective_variance == "covariant":
+            # Output position: source arg must be subtype of target arg
             valid = self.is_subtype(source_arg, target_arg)
             self._current_depth -= 1
             if valid:
@@ -130,21 +139,19 @@ class VarianceChecker:
                 "reason": f"covariant violation: {source_arg} is not subtype of {target_arg}",
             }
 
-        elif variance == "contravariant":
-            # Contravariant: the relationship reverses direction
-            # e.g., Consumer<Animal> assignable to Consumer<Cat> because Cat <: Animal
-            # Check: source_arg is supertype of target_arg
-            valid = self.is_subtype(source_arg, target_arg)
+        elif effective_variance == "contravariant":
+            # Input position: target arg must be subtype of source arg
+            valid = self.is_subtype(target_arg, source_arg)
             self._current_depth -= 1
             if valid:
                 return {"valid": True, "reason": "contravariant: subtype reversed"}
             return {
                 "valid": False,
-                "reason": f"contravariant violation: {source_arg} is not supertype of {target_arg}",
+                "reason": f"contravariant violation: {target_arg} is not subtype of {source_arg}",
             }
 
         else:
-            # Invariant: exact type match required
+            # Local binding: exact type match required
             valid = target_arg == source_arg
             self._current_depth -= 1
             if valid:

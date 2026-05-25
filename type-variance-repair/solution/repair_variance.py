@@ -1,19 +1,14 @@
 #!/usr/bin/env python3
 """Repair script for type-variance-repair task.
 
-Patches all four bugs and re-runs the type checker to produce correct output.
+Patches all defects and re-runs the type checker to produce correct output.
 """
 import os
 import sys
 
 
 def patch_type_parser():
-    """Fix Bug A: whitespace in comma-split module list.
-    
-    The config has 'modules = core_types,collections,io_handlers, functional'
-    with a space before 'functional'. The parser splits on comma without
-    stripping, so ' functional' never matches 'functional'.
-    """
+    """Fix module filtering: strip whitespace from comma-separated config values."""
     path = "/app/runtime/type_parser.py"
     with open(path, "r") as f:
         content = f.read()
@@ -26,78 +21,62 @@ def patch_type_parser():
 
 
 def patch_variance_checker():
-    """Fix Bug B: wrong config section for recursion depth.
-    
-    Code reads from [checker] (max_recursion_depth = 50) instead of
-    [checker.recursive] (max_recursion_depth = 5). The correct section
-    is referenced in instruction.md Stage 3.
+    """Fix variance checking: use declaration-site variance, not use-site context.
+
+    The buggy code determines variance direction from the assignment context
+    (parameter=contravariant, return_value=covariant). Correct behavior uses
+    the declared variance annotation on the generic type parameter.
     """
     path = "/app/runtime/variance_checker.py"
     with open(path, "r") as f:
         content = f.read()
-    content = content.replace(
-        'self._max_depth = self._config.getint("checker", "max_recursion_depth")',
-        'self._max_depth = self._config.getint("checker.recursive", "max_recursion_depth")'
-    )
-    # Fix Bug E: contravariant check uses wrong direction
-    # The buggy code checks is_subtype(source_arg, target_arg) for contravariant
-    # which is the COVARIANT check. For contravariant, it should check
-    # is_subtype(target_arg, source_arg) - the direction reverses.
-    content = content.replace(
-        '''        elif variance == "contravariant":
-            # Contravariant: the relationship reverses direction
-            # e.g., Consumer<Animal> assignable to Consumer<Cat> because Cat <: Animal
-            # Check: source_arg is supertype of target_arg
-            valid = self.is_subtype(source_arg, target_arg)''',
-        '''        elif variance == "contravariant":
-            # Contravariant: the relationship reverses direction
-            # e.g., Consumer<Animal> assignable to Consumer<Cat> because Cat <: Animal
-            # Check: target_arg must be subtype of source_arg
-            valid = self.is_subtype(target_arg, source_arg)'''
-    )
+    old = '''        # Determine effective variance from the usage context:
+        # parameter positions are input (contravariant direction)
+        # return_value positions are output (covariant direction)
+        # local_bind requires exact match (invariant)
+        if context == "return_value":
+            effective_variance = "covariant"
+        elif context == "parameter":
+            effective_variance = "contravariant"
+        else:
+            effective_variance = "invariant"'''
+    new = '''        # Use the declared variance annotation on the generic type
+        # to determine the subtyping direction for the type argument
+        effective_variance = variance'''
+    content = content.replace(old, new)
     with open(path, "w") as f:
         f.write(content)
 
 
 def patch_constraint_solver():
-    """Fix Bug C: constraint solver accumulates bounds instead of last-write-wins.
-    
-    The solver appends new bounds to existing ones (bound += ',new_bound')
-    and sums priorities. It should replace with the new (higher priority) bound.
+    """Fix constraint resolution: use greatest lower bound (most specific), not LUB.
+
+    The buggy code selects the bound with minimum depth (most general/widest).
+    Correct behavior selects maximum depth (most specific/narrowest) — the GLB.
     """
     path = "/app/runtime/constraint_solver.py"
     with open(path, "r") as f:
         content = f.read()
     content = content.replace(
-        '''            else:
-                # Higher priority constraint overrides lower
-                existing = self._constraints[scope][type_var]
-                existing["bound"] += f",{record.bound}"
-                existing["priority"] += record.priority''',
-        '''            else:
-                # Higher priority constraint overrides lower
-                existing = self._constraints[scope][type_var]
-                existing["bound"] = record.bound
-                existing["priority"] = record.priority
-                existing["source_module"] = record.source_module'''
+        "# Find the bound with minimum depth (closest to root = most general)",
+        "# Find the bound with maximum depth (furthest from root = most specific)"
+    )
+    content = content.replace(
+        "if d < best_depth:",
+        "if d > best_depth:"
     )
     with open(path, "w") as f:
         f.write(content)
 
 
 def patch_run_checker():
-    """Fix Bug D: sort tiebreaker missing source_module.
-    
-    When records share the same timestamp, the sort uses only (timestamp, seq).
-    But seq is local to each stream/module, so two records from different modules
-    can have the same (timestamp, seq). Need source_module as middle key.
-    """
+    """Fix sort ordering: add source_module as tiebreaker for deterministic output."""
     path = "/app/runtime/run_checker.py"
     with open(path, "r") as f:
         content = f.read()
     content = content.replace(
-        'key=lambda r: (r.timestamp, r.seq)',
-        'key=lambda r: (r.timestamp, r.source_module, r.seq)'
+        "key=lambda r: (r.timestamp, r.seq)",
+        "key=lambda r: (r.timestamp, r.source_module, r.seq)"
     )
     with open(path, "w") as f:
         f.write(content)

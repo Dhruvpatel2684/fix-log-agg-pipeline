@@ -2,20 +2,20 @@ author_name = "Dhruvkumar Patel"
 author_email = "dhruvpatel2284@gmail.com"
 category = "type_systems"
 difficulty = "hard"
-tags = ["type-theory", "variance", "generics", "subtyping", "constraint-solving"]
+tags = ["type-theory", "variance", "generics", "subtyping", "lattice-theory"]
 
-difficulty_explanation = "Requires understanding of type variance (covariance vs contravariance), config parsing subtleties, scope-based constraint resolution, and deterministic sort ordering across multiple source modules."
-solution_explanation = "Four distinct bugs must be identified and fixed: (1) unstripped whitespace in comma-split module list filters out a source, (2) wrong config section for recursion depth causes premature termination, (3) constraint solver accumulates bounds instead of using latest per scope, (4) sort tiebreaker missing source_module for deterministic cross-module ordering."
-verification_explanation = "Tests validate structural integrity (file existence, record counts), individual variance checks (covariant/contravariant/invariant), constraint resolution correctness, and full end-to-end deterministic output."
+difficulty_explanation = "Requires understanding the mathematical distinction between declaration-site variance and use-site variance in type theory, lattice operations (GLB vs LUB) on type hierarchies, config parsing subtleties, and deterministic cross-module sort ordering."
+solution_explanation = "Four bugs: (1) unstripped whitespace in config module list excludes a source, (2) variance checker uses use-site variance (context-based) instead of declaration-site variance (annotation-based), (3) constraint solver computes LUB (least upper bound, most general) instead of GLB (greatest lower bound, most specific), (4) sort key missing source_module for cross-module determinism."
+verification_explanation = "Tests validate structural integrity, module inclusion, declaration-site variance semantics for cross-position generics, greatest-lower-bound constraint resolution, and deterministic output ordering."
 expert_time_estimate_hours = 3.0
 
 [task]
 name = "type-variance-repair"
-description = "A generic type assignability checker with variance-aware subtyping is producing incorrect results. Multiple defects in parsing, configuration, constraint resolution, and event ordering must be diagnosed and corrected."
+description = "A generic type assignability checker with variance-aware subtyping is producing incorrect results. Defects in module filtering, variance semantics (use-site vs declaration-site), constraint lattice resolution, and event ordering must be diagnosed and corrected."
 
 [task.difficulty]
 level = "hard"
-reasoning = "The task involves understanding type-theoretic concepts (covariance, contravariance, invariance), tracing data flow across four modules, identifying subtle configuration issues, and fixing a non-obvious sort stability problem."
+reasoning = "The core bug implements use-site variance (a valid type-theoretic concept used in Java wildcards) instead of declaration-site variance (used in Kotlin/C#/Scala). Both produce identical results when containers are used in their natural positions, making the bug invisible for most test cases. Only cross-position usage reveals the difference, requiring deep understanding of variance theory."
 
 [task.runtime]
 entrypoint = "python3 -m runtime.run_checker"

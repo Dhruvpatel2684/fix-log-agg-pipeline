@@ -37,7 +37,7 @@ def main():
     )
 
     for record in assignments:
-        result = checker.check_assignment(record.target, record.source)
+        result = checker.check_assignment(record.target, record.source, record.context)
         assignment_results.append({
             "id": record.id,
             "source_module": record.source_module,
@@ -52,7 +52,12 @@ def main():
         })
 
     # Stage 4: Resolve constraints
-    solver = ConstraintSolver()
+    type_hierarchy = {}
+    for record in records:
+        if record.kind == "type_decl":
+            type_hierarchy[record.name] = record.parent
+
+    solver = ConstraintSolver(type_hierarchy)
     solver.collect_constraints(records)
     constraint_results = solver.get_all_resolutions()
 

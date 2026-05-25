@@ -1,7 +1,8 @@
 """Tests for the type variance checking system.
 
-Validates correct operation of parsing, variance-aware assignment checking,
-constraint resolution, and deterministic report generation.
+Validates correct operation of type parsing, declaration-site variance
+checking, constraint resolution via greatest lower bound, and
+deterministic report generation across multiple source modules.
 """
 import json
 import os
@@ -17,251 +18,200 @@ def load_json(filename):
 
 
 class TestOutputStructure:
-    """Structural tests that verify output files exist and have correct format."""
+    """Structural tests verifying output files exist with correct format."""
 
     def test_output_directory_exists(self):
-        """Verify the output directory was created by the type checker."""
+        """The output directory must be created during processing."""
         assert os.path.isdir(OUTPUT_DIR), (
-            f"Output directory {OUTPUT_DIR} does not exist. "
-            "The type checker may not have been run."
+            f"Output directory {OUTPUT_DIR} was not created"
         )
 
-    def test_all_report_files_present(self):
-        """Verify all three expected output files are generated."""
-        expected_files = [
-            "assignments_report.json",
-            "constraints_report.json",
-            "summary.json",
-        ]
-        for fname in expected_files:
+    def test_all_report_files_generated(self):
+        """All three report files must be present after processing."""
+        for fname in ["assignments_report.json", "constraints_report.json", "summary.json"]:
             path = os.path.join(OUTPUT_DIR, fname)
-            assert os.path.isfile(path), (
-                f"Missing output file: {fname}. "
-                "Check that /app/runtime/reporter.py generates all reports."
-            )
+            assert os.path.isfile(path), f"Expected output file {fname} not found"
 
-    def test_summary_has_required_fields(self):
-        """Verify summary.json contains all required schema fields."""
+    def test_summary_schema_fields(self):
+        """Summary report must contain all required aggregate fields."""
         summary = load_json("summary.json")
-        required_fields = [
-            "total_checked",
-            "valid_assignments",
-            "invalid_assignments",
-            "violations",
-            "constraint_count",
-        ]
-        for field in required_fields:
-            assert field in summary, (
-                f"summary.json missing required field '{field}'. "
-                "Check /app/runtime/reporter.py _write_summary method."
-            )
+        for field in ["total_checked", "valid_assignments", "invalid_assignments",
+                      "violations", "constraint_count"]:
+            assert field in summary, f"Missing field '{field}' in summary"
 
-    def test_assignments_report_structure(self):
-        """Verify assignments_report.json contains total and assignments list."""
+    def test_assignment_record_schema(self):
+        """Each assignment record must contain all required fields."""
         report = load_json("assignments_report.json")
-        assert "total_assignments" in report, (
-            "assignments_report.json missing 'total_assignments' field"
-        )
-        assert "assignments" in report, (
-            "assignments_report.json missing 'assignments' field"
-        )
-        assert isinstance(report["assignments"], list), (
-            "'assignments' field must be a list"
-        )
-        # Each assignment must have required fields
+        assert isinstance(report["assignments"], list)
         if report["assignments"]:
-            first = report["assignments"][0]
-            for field in ["id", "source_module", "target", "source", "valid", "reason"]:
-                assert field in first, (
-                    f"Assignment record missing field '{field}'"
-                )
+            rec = report["assignments"][0]
+            for field in ["id", "source_module", "target", "source",
+                          "context", "valid", "reason"]:
+                assert field in rec, f"Assignment record missing '{field}'"
 
 
-class TestSourceModuleInclusion:
-    """Tests that verify all configured source modules are processed."""
+class TestModuleInclusion:
+    """Tests verifying correct source module filtering."""
 
-    def test_total_records_includes_all_modules(self):
-        """Verify that all four source modules are included in processing.
-
-        The configuration lists: core_types, collections, io_handlers, functional.
-        All four must be parsed and included. Check the module list in
-        /app/runtime/config.ini [sources] section for correct parsing.
-        """
+    def test_total_assignment_count(self):
+        """All configured modules must contribute records to the output."""
         report = load_json("assignments_report.json")
-        assert report["total_assignments"] == 27, (
-            f"Expected 27 total assignments (from all 4 modules), "
-            f"got {report['total_assignments']}. "
-            "Check that /app/runtime/type_parser.py correctly parses the "
-            "modules list from /app/runtime/config.ini [sources] section."
+        assert report["total_assignments"] == 31, (
+            f"Expected 31 assignments from all configured modules, "
+            f"got {report['total_assignments']}"
         )
 
-    def test_functional_module_present(self):
-        """Verify records from the 'functional' source module are included."""
+    def test_all_modules_present_in_output(self):
+        """Records from all four configured modules must appear."""
         report = load_json("assignments_report.json")
-        modules_present = set(
-            a["source_module"] for a in report["assignments"]
-        )
-        assert "functional" in modules_present, (
-            "The 'functional' module records are missing from output. "
-            "Check how /app/runtime/type_parser.py splits the modules config "
-            "value in /app/runtime/config.ini."
-        )
-
-    def test_all_four_modules_represented(self):
-        """Verify all four modules have records in the output."""
-        report = load_json("assignments_report.json")
-        modules_present = set(
-            a["source_module"] for a in report["assignments"]
-        )
+        modules = set(a["source_module"] for a in report["assignments"])
         expected = {"core_types", "collections", "io_handlers", "functional"}
-        assert modules_present == expected, (
-            f"Expected modules {expected}, got {modules_present}. "
-            "Check /app/runtime/config.ini modules list parsing."
+        assert modules == expected, (
+            f"Expected modules {expected}, found {modules}"
         )
 
 
-class TestVarianceChecking:
-    """Tests for correct variance-aware assignability decisions."""
+class TestDeclarationSiteVariance:
+    """Tests verifying declaration-site variance semantics.
 
-    def test_contravariant_valid_assignment(self):
-        """Verify that Consumer<Animal> -> Consumer<Cat> is VALID (contravariant).
+    In declaration-site variance, the subtyping direction for a generic
+    type's argument is determined by the variance annotation declared
+    on the generic type parameter itself, NOT by the position where
+    the assignment occurs (parameter vs return_value context).
+    """
 
-        For a contravariant container like Consumer<T>, the direction reverses:
-        if Cat <: Animal, then Consumer<Animal> is assignable to Consumer<Cat>.
-        The check must verify target_arg <: source_arg (Cat <: Animal = true).
+    def test_covariant_in_parameter_position_valid(self):
+        """A covariant type used in parameter position must still use covariant rules.
+
+        Producer is declared covariant. Producer<Cat> assigned to Producer<Animal>
+        in a parameter context must be VALID because Cat <: Animal and
+        the declared variance is covariant (subtype preserved).
         """
         report = load_json("assignments_report.json")
-        ct014 = next(
-            (a for a in report["assignments"] if a["id"] == "CT014"), None
-        )
-        assert ct014 is not None, "Assignment CT014 not found in output"
-        assert ct014["valid"] is True, (
-            f"CT014: Consumer<Animal> -> Consumer<Cat> should be VALID. "
-            f"For contravariant, target_arg (Cat) must be subtype of source_arg "
-            f"(Animal). Cat <: Animal is true. Got: {ct014['reason']}. "
-            "Check the contravariant branch in "
-            "/app/runtime/variance_checker.py _check_variance_assignability."
+        rec = next((a for a in report["assignments"] if a["id"] == "CT020"), None)
+        assert rec is not None, "Record CT020 not found"
+        assert rec["valid"] is True, (
+            f"CT020 should be valid: covariant container in parameter position "
+            f"still uses declaration-site covariant rules. Got: {rec['reason']}"
         )
 
-    def test_contravariant_invalid_assignment(self):
-        """Verify that Consumer<Cat> -> Consumer<Animal> is INVALID (contravariant).
+    def test_contravariant_in_return_position_valid(self):
+        """A contravariant type used in return position must still use contravariant rules.
 
-        For contravariant: need target_arg <: source_arg.
-        Target is Consumer<Animal>, source is Consumer<Cat>.
-        Check: Animal <: Cat? NO. So this should be invalid.
+        Consumer is declared contravariant. Consumer<Animal> assigned to
+        Consumer<Cat> in return_value context must be VALID because
+        Cat <: Animal and contravariant reverses direction.
         """
         report = load_json("assignments_report.json")
-        ct012 = next(
-            (a for a in report["assignments"] if a["id"] == "CT012"), None
-        )
-        assert ct012 is not None, "Assignment CT012 not found in output"
-        assert ct012["valid"] is False, (
-            f"CT012: Consumer<Cat> -> Consumer<Animal> should be INVALID. "
-            f"For contravariant, target_arg (Animal) must be subtype of "
-            f"source_arg (Cat). Animal is NOT subtype of Cat. "
-            f"Got: {ct012['reason']}. "
-            "Check /app/runtime/variance_checker.py contravariant logic."
+        rec = next((a for a in report["assignments"] if a["id"] == "CT021"), None)
+        assert rec is not None, "Record CT021 not found"
+        assert rec["valid"] is True, (
+            f"CT021 should be valid: contravariant container in return position "
+            f"still uses declaration-site contravariant rules. Got: {rec['reason']}"
         )
 
-    def test_handler_contravariant_from_functional(self):
-        """Verify Handler<Predicate> -> Handler<Callable> valid in functional module.
+    def test_covariant_in_parameter_position_invalid(self):
+        """A covariant container with wrong direction must be invalid regardless of context.
 
-        Handler is contravariant. Target=Handler<Predicate>, Source=Handler<Callable>.
-        Contravariant check: target_arg(Predicate) <: source_arg(Callable)?
-        Yes, Predicate extends Callable. So this is VALID.
-        Requires functional module to be included.
+        Producer<Animal> assigned to Producer<Cat> in parameter position:
+        covariant requires source_arg <: target_arg, Animal <: Cat is false.
+        Must be INVALID even though parameter context would suggest contravariant.
         """
         report = load_json("assignments_report.json")
-        fn007 = next(
-            (a for a in report["assignments"] if a["id"] == "FN007"), None
+        rec = next((a for a in report["assignments"] if a["id"] == "CT022"), None)
+        assert rec is not None, "Record CT022 not found"
+        assert rec["valid"] is False, (
+            f"CT022 should be invalid: covariant declared type, "
+            f"Animal is not subtype of Cat. Got: {rec['reason']}"
         )
-        assert fn007 is not None, (
-            "Assignment FN007 not found - functional module may be missing. "
-            "Check /app/runtime/type_parser.py module list parsing."
-        )
-        assert fn007["valid"] is True, (
-            f"FN007: Handler<Callable> -> Handler<Predicate> should be VALID. "
-            f"Contravariant: Predicate <: Callable. Got: {fn007['reason']}. "
-            "Check /app/runtime/variance_checker.py contravariant logic."
+
+    def test_contravariant_in_return_position_invalid(self):
+        """A contravariant container with wrong direction must be invalid regardless of context.
+
+        Consumer<Cat> assigned to Consumer<Animal> in return_value position:
+        contravariant requires target_arg <: source_arg, Animal <: Cat is false.
+        Must be INVALID even though return context would suggest covariant.
+        """
+        report = load_json("assignments_report.json")
+        rec = next((a for a in report["assignments"] if a["id"] == "CT023"), None)
+        assert rec is not None, "Record CT023 not found"
+        assert rec["valid"] is False, (
+            f"CT023 should be invalid: contravariant declared type, "
+            f"Animal is not subtype of Cat. Got: {rec['reason']}"
         )
 
 
 class TestConstraintResolution:
-    """Tests for correct type variable constraint resolution."""
+    """Tests verifying greatest-lower-bound constraint resolution.
 
-    def test_constraint_last_write_wins(self):
-        """Verify that constraint resolution uses last-write-wins semantics.
+    When multiple type bounds exist for a type variable in a scope,
+    the resolver must select the most specific (narrowest/deepest in
+    the hierarchy) bound — the greatest lower bound in the type lattice.
+    """
 
-        Within a scope, multiple constraints for the same type variable
-        should resolve to the HIGHEST priority bound only, not accumulate.
-        """
+    def test_process_animals_resolves_to_most_specific(self):
+        """T1 in fn:process_animals has bounds [Cat, Siamese]. Must resolve to Siamese."""
         report = load_json("constraints_report.json")
-        fn_process = next(
+        rec = next(
             (r for r in report["resolutions"]
              if r["scope"] == "fn:process_animals" and r["type_var"] == "T1"),
-            None,
+            None
         )
-        assert fn_process is not None, (
-            "Missing constraint resolution for T1 in scope fn:process_animals"
-        )
-        assert fn_process["resolved_bound"] == "Siamese", (
-            f"T1 in fn:process_animals should resolve to 'Siamese' "
-            f"(highest priority=4), got '{fn_process['resolved_bound']}'. "
-            "Check /app/runtime/constraint_solver.py - constraints should use "
-            "last-write-wins, not accumulate bounds."
+        assert rec is not None, "Resolution for T1/fn:process_animals not found"
+        assert rec["resolved_bound"] == "Siamese", (
+            f"Expected most specific bound 'Siamese' (depth 3), "
+            f"got '{rec['resolved_bound']}'"
         )
 
-    def test_constraint_priority_value(self):
-        """Verify that resolved constraint has the correct priority value."""
+    def test_merge_lists_resolves_to_most_specific(self):
+        """E1 in fn:merge_lists has bounds [List, MutableList]. Must resolve to MutableList."""
         report = load_json("constraints_report.json")
-        fn_merge = next(
+        rec = next(
             (r for r in report["resolutions"]
              if r["scope"] == "fn:merge_lists" and r["type_var"] == "E1"),
-            None,
+            None
         )
-        assert fn_merge is not None, (
-            "Missing constraint resolution for E1 in scope fn:merge_lists"
-        )
-        assert fn_merge["priority"] == 3, (
-            f"E1 in fn:merge_lists should have priority 3 (the winning "
-            f"constraint's priority), got {fn_merge['priority']}. "
-            "Check /app/runtime/constraint_solver.py accumulation logic."
+        assert rec is not None, "Resolution for E1/fn:merge_lists not found"
+        assert rec["resolved_bound"] == "MutableList", (
+            f"Expected most specific bound 'MutableList' (depth 3), "
+            f"got '{rec['resolved_bound']}'"
         )
 
+    def test_read_all_resolves_to_most_specific(self):
+        """R1 in fn:read_all has bounds [InputStream, BufferedInput]. Must resolve to BufferedInput."""
+        report = load_json("constraints_report.json")
+        rec = next(
+            (r for r in report["resolutions"]
+             if r["scope"] == "fn:read_all" and r["type_var"] == "R1"),
+            None
+        )
+        assert rec is not None, "Resolution for R1/fn:read_all not found"
+        assert rec["resolved_bound"] == "BufferedInput", (
+            f"Expected most specific bound 'BufferedInput' (depth 3), "
+            f"got '{rec['resolved_bound']}'"
+        )
 
-class TestDeterministicOrdering:
-    """Tests for deterministic output ordering across source modules."""
 
-    def test_same_timestamp_ordering(self):
-        """Verify deterministic ordering when records share a timestamp.
+class TestDeterministicOutput:
+    """Tests verifying deterministic ordering and aggregate correctness."""
 
-        Records at timestamp '2024-01-15T10:01:00Z' come from multiple
-        modules (collections, core_types, functional, io_handlers).
-        They must be sorted by (timestamp, source_module, seq) for
-        deterministic output. Check /app/runtime/run_checker.py sort key.
-        """
+    def test_cross_module_timestamp_ordering(self):
+        """Records sharing a timestamp must be ordered by source_module then seq."""
         report = load_json("assignments_report.json")
-        # Find all assignments at the shared timestamp
         ts = "2024-01-15T10:01:00Z"
         same_ts = [a for a in report["assignments"] if a["timestamp"] == ts]
-        assert len(same_ts) == 4, (
-            f"Expected 4 assignments at {ts} (one from each module), "
-            f"got {len(same_ts)}. Check source module inclusion."
+        # With all 4 modules included, should have records from each
+        assert len(same_ts) >= 4, (
+            f"Expected at least 4 records at {ts}, got {len(same_ts)}"
         )
-        # Verify ordering: collections < core_types < functional < io_handlers
-        modules_in_order = [a["source_module"] for a in same_ts]
-        expected_order = ["collections", "core_types", "functional", "io_handlers"]
-        assert modules_in_order == expected_order, (
-            f"Records at {ts} are not in deterministic order. "
-            f"Expected {expected_order}, got {modules_in_order}. "
-            "Check sort key in /app/runtime/run_checker.py - needs "
-            "source_module as tiebreaker between timestamp and seq."
+        modules_order = [a["source_module"] for a in same_ts]
+        assert modules_order == sorted(modules_order), (
+            f"Records at {ts} not in deterministic module order: {modules_order}"
         )
 
-    def test_violation_count_correct(self):
-        """Verify the total number of violations is correct after all fixes."""
+    def test_total_violations_count(self):
+        """With all bugs fixed, exactly 13 assignments must be violations."""
         summary = load_json("summary.json")
-        assert summary["invalid_assignments"] == 11, (
-            f"Expected 11 invalid assignments, got {summary['invalid_assignments']}. "
-            "This requires all variance checks and module inclusion to be correct."
+        assert summary["invalid_assignments"] == 13, (
+            f"Expected 13 violations, got {summary['invalid_assignments']}"
         )
