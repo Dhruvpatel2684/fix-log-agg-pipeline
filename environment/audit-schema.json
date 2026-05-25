@@ -1,0 +1,26 @@
+{
+  "sidecar_schema_json": {
+    "path": "/var/lib/cert-audit/evidence/audit-schema.json",
+    "content": "byte-for-byte copy of /opt/cert-audit/audit-schema.json"
+  },
+  "reconciliation_tsv": {
+    "path": "/var/lib/cert-audit/evidence/reconciliation.tsv",
+    "delimiter": "\\t",
+    "header": "cert_fingerprint\tcommon_name\trotation_count\tavg_lag_hours\tcompliance_pct",
+    "columns": ["cert_fingerprint", "common_name", "rotation_count", "avg_lag_hours", "compliance_pct"],
+    "sort": "data rows sorted by cert_fingerprint ascending"
+  },
+  "attestation_json": {
+    "path": "/opt/cert-audit/attestation.json",
+    "required_keys": ["artifact", "sha256", "rows"],
+    "artifact": "absolute path to reconciliation.tsv",
+    "sha256": "lowercase hexadecimal digest of reconciliation.tsv bytes",
+    "rows": "integer count of data rows excluding the header line"
+  },
+  "compliance_gate_json": {
+    "path": "/opt/cert-audit/compliance-gate.json",
+    "required_keys": ["status", "rows"],
+    "status": "PASS",
+    "rows": "integer, must equal attestation.json rows"
+  }
+}
