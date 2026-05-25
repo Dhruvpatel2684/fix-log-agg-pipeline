@@ -1,0 +1,6 @@
+[
+  {"cert_fingerprint": "CF01", "common_name": "payments.prod.internal", "namespace": "payments", "issuer": "internal-ca", "not_after": "2026-08-15T00:00:00Z"},
+  {"cert_fingerprint": "CF02", "common_name": "orders.prod.internal", "namespace": "orders", "issuer": "internal-ca", "not_after": "2026-07-20T00:00:00Z"},
+  {"cert_fingerprint": "CF03", "common_name": "healthcheck.prod.internal", "namespace": "monitoring", "issuer": "internal-ca", "not_after": "2026-09-01T00:00:00Z"},
+  {"cert_fingerprint": "CF99", "common_name": "legacy.decom.internal", "namespace": "decommissioned", "issuer": "external-ca", "not_after": "2025-01-01T00:00:00Z"}
+]
