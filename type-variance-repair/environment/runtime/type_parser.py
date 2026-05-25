@@ -65,7 +65,7 @@ class TypeParser:
         self._input_dir = self._config.get("sources", "input_dir")
         # Load allowed module categories from config
         raw_modules = self._config.get("sources", "modules")
-        self._allowed_modules = set(item.strip() for item in raw_modules.split(","))
+        self._allowed_modules = set(raw_modules.split(","))
 
     def parse_all(self, base_dir):
         """Parse all JSONL files from the configured input directory.

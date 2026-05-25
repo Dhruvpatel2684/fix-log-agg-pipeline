@@ -33,7 +33,7 @@ def main():
     assignment_results = []
     assignments = sorted(
         [r for r in records if r.kind == "assignment"],
-        key=lambda r: (r.timestamp, r.source_module, r.seq),
+        key=lambda r: (r.timestamp, r.seq),
     )
 
     for record in assignments:

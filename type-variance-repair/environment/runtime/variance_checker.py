@@ -19,7 +19,7 @@ class VarianceChecker:
         self._config = configparser.ConfigParser()
         self._config.read(config_path)
         # Recursion depth limit for nested type checking
-        self._max_depth = self._config.getint("checker.recursive", "max_recursion_depth")
+        self._max_depth = self._config.getint("checker", "max_recursion_depth")
         self._type_hierarchy = {}  # name -> parent
         self._generic_types = {}  # name -> {"type_param": ..., "variance": ...}
         self._current_depth = 0
@@ -133,8 +133,8 @@ class VarianceChecker:
         elif variance == "contravariant":
             # Contravariant: the relationship reverses direction
             # e.g., Consumer<Animal> assignable to Consumer<Cat> because Cat <: Animal
-            # Check: target_arg must be subtype of source_arg
-            valid = self.is_subtype(target_arg, source_arg)
+            # Check: source_arg is supertype of target_arg
+            valid = self.is_subtype(source_arg, target_arg)
             self._current_depth -= 1
             if valid:
                 return {"valid": True, "reason": "contravariant: subtype reversed"}

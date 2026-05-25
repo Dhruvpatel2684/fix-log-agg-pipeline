@@ -45,9 +45,8 @@ class ConstraintSolver:
             else:
                 # Higher priority constraint overrides lower
                 existing = self._constraints[scope][type_var]
-                existing["bound"] = record.bound
-                existing["priority"] = record.priority
-                existing["source_module"] = record.source_module
+                existing["bound"] += f",{record.bound}"
+                existing["priority"] += record.priority
 
     def resolve(self, type_var, scope):
         """Resolve the effective bound for a type variable in a given scope.
