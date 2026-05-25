@@ -124,18 +124,22 @@ def test_env_loader_does_not_override_format() -> None:
             "cert-env-loader.sh must not set OUTPUT_FORMAT"
 
 
-def test_evidence_dir_not_immutable() -> None:
-    """Evidence directory must not have the ext4 immutable attribute set."""
+def test_evidence_dir_no_restrictive_acl() -> None:
+    """Evidence directory must not have a POSIX ACL that blocks write access."""
     result = subprocess.run(
-        ["lsattr", "-d", str(EVIDENCE_DIR)],
+        ["getfacl", "--absolute-names", str(EVIDENCE_DIR)],
         capture_output=True, text=True, check=False,
     )
     if result.returncode == 0:
-        # lsattr output format: "----i--------e-- /path" where 'i' means immutable
-        attrs = result.stdout.split()[0] if result.stdout.strip() else ""
-        assert "i" not in attrs, \
-            f"evidence directory still has immutable attribute: {attrs}"
-    # If lsattr fails (e.g., filesystem doesn't support it), we verify by write test
+        # After setfacl -b, there should be no ACL entries that restrict owner write
+        for line in result.stdout.splitlines():
+            stripped = line.strip()
+            # Check owner line — must include 'w'
+            if stripped.startswith("user::"):
+                perms = stripped.split("::")[1]
+                assert "w" in perms, \
+                    f"evidence directory owner ACL denies write: {stripped}"
+    # Also verify by probe write
     probe = EVIDENCE_DIR / ".write_probe"
     probe.write_text("ok\n", encoding="utf-8")
     probe.unlink()

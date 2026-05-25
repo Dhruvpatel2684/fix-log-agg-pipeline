@@ -20,8 +20,9 @@ tmp="$(mktemp)"
 grep -v '^OUTPUT_FORMAT=' "$LOADER" >"$tmp"
 mv "$tmp" "$LOADER"
 
-# 5. Clear immutable attribute on evidence directory
-chattr -i /var/lib/cert-audit/evidence
+# 5. Clear restrictive POSIX ACL on evidence directory and restore write access
+setfacl -b /var/lib/cert-audit/evidence
+chmod 755 /var/lib/cert-audit/evidence
 
 # 6. Execute the reconciliation pipeline
 exec /opt/cert-audit/bin/reconcile-certs.sh

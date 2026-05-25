@@ -12,7 +12,7 @@ RUN mkdir -p /logs/verifier /logs/agent \
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
-    e2fsprogs \
+    acl \
     ca-certificates \
     curl \
     && rm -rf /var/lib/apt/lists/*
@@ -29,4 +29,4 @@ COPY data/input/rotation-events.jsonl /opt/cert-audit/data/input/rotation-events
 COPY data/input/cluster-certs.json /opt/cert-audit/data/input/cluster-certs.json
 
 RUN chmod +x /opt/cert-audit/bin/reconcile-certs.sh \
-    && chattr +i /var/lib/cert-audit/evidence
+    && setfacl -m u::r-x /var/lib/cert-audit/evidence
