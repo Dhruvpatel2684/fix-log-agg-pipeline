@@ -1,9 +1,9 @@
 """
-Tests for the lattice-based information flow analysis system.
+Tests for the product lattice information flow analysis system.
 
-Validates that the security lattice correctly processes department flow
-events, detects violations at the proper threshold, computes accurate
-flow volumes, and produces well-structured output reports.
+Validates correctness of the two-dimensional security lattice operations
+including dominance detection, violation classification, combined label
+computation, event deduplication, and volume aggregation.
 """
 
 import json
@@ -13,226 +13,244 @@ import os
 OUTPUT_DIR = "/app/runtime/output"
 
 
-class TestOutputFilesExist:
-    """Verify that the analysis produces all expected output files."""
+class TestOutputStructure:
+    """Verify that the analysis produces well-formed output files."""
 
     def test_summary_file_exists(self):
         """The analysis must produce a summary.json report file."""
         path = os.path.join(OUTPUT_DIR, "summary.json")
         assert os.path.exists(path), (
-            f"Expected summary report at {path}. "
-            "Check that /app/runtime/run_analysis.py completes without error."
+            f"Expected summary report at {path}."
         )
 
     def test_violations_file_exists(self):
         """The analysis must produce a violations.json report file."""
         path = os.path.join(OUTPUT_DIR, "violations.json")
         assert os.path.exists(path), (
-            f"Expected violations report at {path}. "
-            "Check that /app/runtime/run_analysis.py completes without error."
+            f"Expected violations report at {path}."
         )
 
     def test_flow_matrix_file_exists(self):
         """The analysis must produce a flow_matrix.json report file."""
         path = os.path.join(OUTPUT_DIR, "flow_matrix.json")
         assert os.path.exists(path), (
-            f"Expected flow matrix at {path}. "
-            "Check that /app/runtime/run_analysis.py completes without error."
+            f"Expected flow matrix at {path}."
         )
-
-    def test_volumes_file_exists(self):
-        """The analysis must produce a volumes.json report file."""
-        path = os.path.join(OUTPUT_DIR, "volumes.json")
-        assert os.path.exists(path), (
-            f"Expected volumes report at {path}. "
-            "Check that /app/runtime/run_analysis.py completes without error."
-        )
-
-
-class TestSummaryStructure:
-    """Verify the summary report has correct structure and event counts."""
 
     def test_summary_has_required_fields(self):
         """Summary must contain all required statistical fields."""
         path = os.path.join(OUTPUT_DIR, "summary.json")
         with open(path) as f:
             summary = json.load(f)
-        required_fields = [
+        required = [
             "total_events_loaded",
-            "monitored_events",
+            "events_after_dedup",
             "total_violations",
-            "entities_with_volume",
-            "flow_matrix_sources"
+            "source_volumes",
+            "flow_matrix_size"
         ]
-        for field in required_fields:
+        for field in required:
             assert field in summary, (
-                f"Missing field '{field}' in summary.json. "
-                f"Expected fields: {required_fields}"
+                f"Missing field '{field}' in summary.json"
             )
 
     def test_total_events_loaded(self):
-        """All 54 events from three department sources must be loaded."""
+        """All 54 events from three source files must be loaded."""
         path = os.path.join(OUTPUT_DIR, "summary.json")
         with open(path) as f:
             summary = json.load(f)
         assert summary["total_events_loaded"] == 54, (
-            f"Expected 54 total events (18 per department x 3 departments), "
-            f"got {summary['total_events_loaded']}. "
-            "Check /app/runtime/loader.py loads all *_flows.json files."
+            f"Expected 54 total events, got {summary['total_events_loaded']}"
         )
 
 
-class TestDepartmentMonitoring:
-    """Verify all configured departments are correctly monitored."""
+class TestDeduplication:
+    """Verify correct event deduplication semantics."""
 
-    def test_monitored_event_count(self):
-        """All 54 events should be from monitored departments including compliance.
+    def test_dedup_preserves_cross_source_events(self):
+        """Events from different sources referencing the same entity must be preserved.
 
-        The configuration lists four monitored departments: engineering,
-        research, operations, and compliance. All loaded events belong to
-        one of these departments, so monitored_events should equal
-        total_events_loaded.
+        When multiple independent sources report flows involving the same entity
+        within the deduplication window, these represent genuinely distinct
+        information flows from different organizational units. The deduplication
+        policy must preserve source-level autonomy by including the source
+        identity in the deduplication key.
         """
         path = os.path.join(OUTPUT_DIR, "summary.json")
         with open(path) as f:
             summary = json.load(f)
-        assert summary["monitored_events"] == 54, (
-            f"Expected 54 monitored events (all departments are monitored), "
-            f"got {summary['monitored_events']}. "
-            "Check that department name parsing in /app/runtime/analyzer.py "
-            "correctly handles all entries in the monitored_departments config list."
+        # All 54 events are distinct (different source_id for same-entity pairs)
+        assert summary["events_after_dedup"] == 54, (
+            f"Expected 54 events after deduplication (no true duplicates exist), "
+            f"got {summary['events_after_dedup']}. "
+            "Verify that the deduplication identity includes the source stream "
+            "in /app/runtime/loader.py — events from different sources for the "
+            "same entity are independent observations, not duplicates."
         )
 
-    def test_flow_matrix_includes_restricted_label(self):
-        """Flow matrix must include 'restricted' as a source label.
+    def test_research_volume_includes_all_events(self):
+        """Research source volume must include all 18 research events.
 
-        Compliance department events flow from the 'restricted' label.
-        If compliance is correctly monitored, 'restricted' must appear
-        as a key in the flow matrix.
+        If cross-source deduplication incorrectly merges events from different
+        sources, the research volume will be lower than expected because some
+        research events sharing entity names with engineering events would be
+        dropped.
         """
-        path = os.path.join(OUTPUT_DIR, "flow_matrix.json")
+        path = os.path.join(OUTPUT_DIR, "summary.json")
         with open(path) as f:
-            matrix = json.load(f)
-        assert "restricted" in matrix, (
-            f"Flow matrix is missing 'restricted' source label. "
-            f"Found sources: {list(matrix.keys())}. "
-            "Compliance department events use 'restricted' as from_label. "
-            "Verify department filtering in /app/runtime/analyzer.py."
+            summary = json.load(f)
+        # Research has 18 events totaling volume 328
+        assert summary["source_volumes"]["research"] == 328, (
+            f"Expected research volume 328, got {summary['source_volumes'].get('research')}. "
+            "Check whether the deduplication in /app/runtime/loader.py incorrectly "
+            "merges events from different source streams that share an entity name."
         )
 
 
-class TestViolationDetection:
-    """Verify security violation detection uses correct thresholds."""
+class TestDominanceDetection:
+    """Verify product lattice dominance uses componentwise ordering."""
 
-    def test_violations_detected(self):
-        """The system must detect violations when flow distance meets threshold.
+    def test_violation_count_reflects_componentwise_dominance(self):
+        """Only flows where BOTH dimensions increase should be classified as violations.
 
-        Under strict analysis mode, the violation threshold is 2. Any
-        information flow crossing 2 or more lattice levels constitutes
-        a violation. With the test data, this produces 27 violations.
+        In a product lattice C x I, element (c1,i1) is dominated by (c2,i2)
+        only when c1 <= c2 AND i1 <= i2 (with at least one strict). Flows where
+        one dimension increases while the other decreases are INCOMPARABLE
+        in the partial order and must not be classified as upward flows.
+
+        With the test data and a distance threshold of 2, there are exactly
+        9 true violations under the componentwise partial order.
         """
         path = os.path.join(OUTPUT_DIR, "violations.json")
         with open(path) as f:
             report = json.load(f)
-        assert report["violation_count"] == 27, (
-            f"Expected 27 violations under strict analysis threshold (distance >= 2), "
+        assert report["violation_count"] == 9, (
+            f"Expected 9 violations under componentwise product lattice ordering, "
             f"got {report['violation_count']}. "
-            "Check which configuration section provides the violation_threshold "
-            "in /app/runtime/analyzer.py — strict mode uses [analysis.strict]."
+            "The product lattice partial order requires BOTH dimensions to be "
+            "non-decreasing (and at least one strictly increasing) for dominance. "
+            "Check the dominance predicate in /app/runtime/lattice.py — it must "
+            "compare each dimension independently, not reduce to a scalar."
         )
 
-    def test_violation_record_structure(self):
-        """Each violation record must contain all required fields."""
-        path = os.path.join(OUTPUT_DIR, "violations.json")
-        with open(path) as f:
-            report = json.load(f)
-        assert len(report["violations"]) > 0, "No violations found"
-        violation = report["violations"][0]
-        required = [
-            "event_id", "source_id", "entity", "from_label",
-            "to_label", "combined_label", "distance", "timestamp"
-        ]
-        for field in required:
-            assert field in violation, (
-                f"Violation record missing field '{field}'. "
-                f"Found: {list(violation.keys())}"
-            )
+    def test_incomparable_flows_excluded(self):
+        """Flows where conf increases but integ decreases must NOT appear as violations.
 
-    def test_violation_combined_label_is_upper_bound(self):
-        """Combined label must be the JOIN (least upper bound) of the two flow labels.
-
-        In lattice-based security, when information from two classification
-        levels merges, the combined classification is the supremum (join) —
-        the HIGHER of the two levels in a total order. This ensures combined
-        information receives at least the highest protection level of its inputs.
-
-        For the flow internal->secret, the combined label must be 'secret'
-        (the higher label), not 'internal' (the lower label).
+        Event eng-004 flows from (internal, certified) to (secret, verified).
+        Confidentiality increases (rank 1->3) but integrity DECREASES (rank 3->2).
+        These labels are incomparable in the product lattice and the flow must
+        not be flagged as a violation.
         """
         path = os.path.join(OUTPUT_DIR, "violations.json")
         with open(path) as f:
             report = json.load(f)
-        # Find a violation with from=internal, to=secret
-        target = None
+        violation_ids = {v["event_id"] for v in report["violations"]}
+        assert "eng-004" not in violation_ids, (
+            "Event eng-004 should NOT be a violation. It flows from "
+            "(internal, certified) to (secret, verified) — confidentiality increases "
+            "but integrity DECREASES. These are incomparable elements in the "
+            "product lattice. Check dominance logic in /app/runtime/lattice.py."
+        )
+        assert "eng-006" not in violation_ids, (
+            "Event eng-006 should NOT be a violation. It flows from "
+            "(internal, authoritative) to (top_secret, verified) — incomparable "
+            "elements where confidentiality increases but integrity decreases."
+        )
+
+
+class TestDistanceMetric:
+    """Verify product lattice distance uses correct metric."""
+
+    def test_violation_distance_uses_chebyshev(self):
+        """Lattice distance must be the maximum dimensional change (L-infinity norm).
+
+        In a product lattice, the distance between two elements measures the
+        worst-case dimensional displacement. For security analysis, a flow
+        crossing 3 levels in confidentiality but 1 level in integrity has
+        distance 3 (the maximum), not 4 (the sum).
+
+        Event cmp-002 flows from (confidential=2, provisional=1) to
+        (secret=3, authoritative=4): conf_delta=1, integ_delta=3.
+        The correct distance is max(1,3) = 3, not 1+3 = 4.
+        """
+        path = os.path.join(OUTPUT_DIR, "violations.json")
+        with open(path) as f:
+            report = json.load(f)
+        cmp002 = None
         for v in report["violations"]:
-            if v["from_label"] == "internal" and v["to_label"] == "secret":
-                target = v
+            if v["event_id"] == "cmp-002":
+                cmp002 = v
                 break
-        assert target is not None, (
-            "No violation found for flow internal->secret. "
-            "Check violation detection in /app/runtime/analyzer.py."
+        assert cmp002 is not None, (
+            "Expected cmp-002 to be a violation"
         )
-        assert target["combined_label"] == "secret", (
-            f"Combined label for internal->secret should be 'secret' (the join/supremum), "
-            f"got '{target['combined_label']}'. "
-            "The combined classification in a security lattice is the LEAST UPPER BOUND "
-            "(join), not the greatest lower bound (meet). "
-            "Check combined_label() in /app/runtime/lattice.py."
+        assert cmp002["distance"] == 3, (
+            f"Distance for cmp-002 should be 3 (max of dimensional deltas), "
+            f"got {cmp002['distance']}. The product lattice distance is the "
+            "L-infinity (Chebyshev) distance: max(|conf_delta|, |integ_delta|). "
+            "Check flow_distance() in /app/runtime/lattice.py."
         )
 
 
-class TestFlowVolumes:
-    """Verify flow volume computation across time windows."""
+class TestJoinComputation:
+    """Verify the product lattice join produces componentwise maximum."""
 
-    def test_entity_volume_not_accumulated(self):
-        """Entity volumes must reflect final window value, not sum across windows.
+    def test_combined_label_is_componentwise_max(self):
+        """The join must take the maximum of each dimension independently.
 
-        Volume counters represent running totals that update with each window
-        snapshot. When an entity appears in multiple time windows, only the
-        most recent window's value is the correct current volume.
+        For event res-003 flowing from (internal, untrusted) to (secret, certified):
+        - The join of these two elements is (max(internal,secret), max(untrusted,certified))
+        - Which equals (secret, certified)
 
-        'design-doc-alpha' appears in windows 0, 1, and 3 with values 37, 9, 16.
-        The correct final volume is 16 (last window), not 62 (sum of all).
+        The join in a product lattice is NOT the average or midpoint — it is
+        the componentwise maximum, representing the least upper bound that
+        dominates both input elements.
         """
-        path = os.path.join(OUTPUT_DIR, "volumes.json")
+        path = os.path.join(OUTPUT_DIR, "violations.json")
         with open(path) as f:
             report = json.load(f)
-        volumes = report["entity_volumes"]
-        assert "design-doc-alpha" in volumes, (
-            "Entity 'design-doc-alpha' missing from volumes report."
+        res003 = None
+        for v in report["violations"]:
+            if v["event_id"] == "res-003":
+                res003 = v
+                break
+        assert res003 is not None, (
+            "Expected res-003 to be a violation"
         )
-        assert volumes["design-doc-alpha"] == 16, (
-            f"Volume for 'design-doc-alpha' should be 16 (final window value), "
-            f"got {volumes['design-doc-alpha']}. "
-            "Check window volume computation in /app/runtime/analyzer.py — "
-            "volumes should reflect the last window snapshot, not accumulate across windows."
+        assert res003["combined_conf"] == "secret", (
+            f"Combined confidentiality for res-003 should be 'secret' "
+            f"(max of 'internal' and 'secret'), got '{res003['combined_conf']}'. "
+            "The join in a product lattice computes the componentwise maximum. "
+            "Check join() in /app/runtime/lattice.py."
+        )
+        assert res003["combined_integ"] == "certified", (
+            f"Combined integrity for res-003 should be 'certified' "
+            f"(max of 'untrusted' and 'certified'), got '{res003['combined_integ']}'. "
+            "Check join() in /app/runtime/lattice.py."
         )
 
-    def test_experiment_alpha_volume(self):
-        """Experiment-alpha volume must reflect its final window snapshot value.
+    def test_combined_label_for_high_severity_flow(self):
+        """The join of (public, untrusted) and (top_secret, authoritative) is (top_secret, authoritative).
 
-        'experiment-alpha' appears across multiple time windows.
-        The correct volume is 9 (final window), not the accumulated total.
+        Event cmp-004 represents the highest-severity flow. Its combined
+        classification must be the componentwise maximum of both endpoints.
         """
-        path = os.path.join(OUTPUT_DIR, "volumes.json")
+        path = os.path.join(OUTPUT_DIR, "violations.json")
         with open(path) as f:
             report = json.load(f)
-        volumes = report["entity_volumes"]
-        assert "experiment-alpha" in volumes, (
-            "Entity 'experiment-alpha' missing from volumes report."
+        cmp004 = None
+        for v in report["violations"]:
+            if v["event_id"] == "cmp-004":
+                cmp004 = v
+                break
+        assert cmp004 is not None, (
+            "Expected cmp-004 to be a violation"
         )
-        assert volumes["experiment-alpha"] == 9, (
-            f"Volume for 'experiment-alpha' should be 9 (final window value), "
-            f"got {volumes['experiment-alpha']}. "
-            "Window volume computation should use last-write-wins semantics."
+        assert cmp004["combined_conf"] == "top_secret", (
+            f"Combined conf for cmp-004 should be 'top_secret', "
+            f"got '{cmp004['combined_conf']}'"
+        )
+        assert cmp004["combined_integ"] == "authoritative", (
+            f"Combined integ for cmp-004 should be 'authoritative', "
+            f"got '{cmp004['combined_integ']}'"
         )

@@ -1,81 +1,135 @@
 """
-Security lattice operations for information flow analysis.
+Product lattice operations for two-dimensional security classification.
 
-Implements a totally-ordered security lattice where each label has a
-defined rank. The lattice supports standard operations for determining
-the combined classification when information from two different labels
-is merged together.
+Implements a product lattice L = C × I where:
+- C is the confidentiality dimension (totally ordered)
+- I is the integrity dimension (totally ordered)
 
-In lattice theory, combining two elements produces their shared bound:
-- For security classification, this represents the effective clearance
-  needed to access the combined information.
+The product lattice uses componentwise ordering:
+  (c1, i1) ≤ (c2, i2)  iff  c1 ≤ c2  AND  i1 ≤ i2
+
+This creates a PARTIAL order even though each dimension is total.
+Two elements may be incomparable (neither dominates the other).
+
+The join (least upper bound) in a product lattice is computed
+componentwise: join((c1,i1), (c2,i2)) = (max(c1,c2), max(i1,i2))
 """
 
 import configparser
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 
-class SecurityLattice:
-    """Represents a finite totally-ordered security lattice."""
+class ProductLattice:
+    """Represents a product lattice over two totally-ordered dimensions."""
 
     def __init__(self, config_path: str):
         self._config = configparser.ConfigParser()
         self._config.read(config_path)
-        raw_levels = self._config.get("lattice", "levels")
-        # Parse the ordered list of security levels
-        self._levels = raw_levels.split(",")
-        self._rank = {level: idx for idx, level in enumerate(self._levels)}
+
+        # Parse confidentiality levels
+        raw_conf = self._config.get("lattice", "confidentiality_levels")
+        self._conf_levels = [l.strip() for l in raw_conf.split(",")]
+        self._conf_rank = {l: i for i, l in enumerate(self._conf_levels)}
+
+        # Parse integrity levels
+        raw_integ = self._config.get("lattice", "integrity_levels")
+        self._integ_levels = [l.strip() for l in raw_integ.split(",")]
+        self._integ_rank = {l: i for i, l in enumerate(self._integ_levels)}
 
     @property
-    def levels(self) -> List[str]:
-        """Return all security levels in order."""
-        return list(self._levels)
+    def conf_levels(self) -> List[str]:
+        """Return confidentiality levels in order."""
+        return list(self._conf_levels)
 
-    def rank_of(self, label: str) -> Optional[int]:
-        """Get numeric rank for a security label."""
-        return self._rank.get(label)
+    @property
+    def integ_levels(self) -> List[str]:
+        """Return integrity levels in order."""
+        return list(self._integ_levels)
 
-    def is_valid_label(self, label: str) -> bool:
-        """Check if a label exists in the lattice."""
-        return label in self._rank
+    def conf_rank(self, label: str) -> Optional[int]:
+        """Get numeric rank for a confidentiality label."""
+        return self._conf_rank.get(label)
 
-    def dominates(self, label_a: str, label_b: str) -> bool:
-        """Check if label_a dominates (is higher than or equal to) label_b."""
-        rank_a = self._rank.get(label_a)
-        rank_b = self._rank.get(label_b)
-        if rank_a is None or rank_b is None:
+    def integ_rank(self, label: str) -> Optional[int]:
+        """Get numeric rank for an integrity label."""
+        return self._integ_rank.get(label)
+
+    def dominates(self, from_pair: Tuple[str, str], to_pair: Tuple[str, str]) -> bool:
+        """
+        Check if to_pair dominates from_pair in the product lattice.
+
+        In a product lattice, dominance requires BOTH components to be
+        at least as high. This is the componentwise partial order:
+        (c1,i1) ≤ (c2,i2) iff c1 ≤ c2 AND i1 ≤ i2.
+
+        When comparing multi-dimensional security labels, we use the
+        standard ordering where the target must exceed or match the source
+        on every axis independently. A flow is considered upward (escalating)
+        only when the destination strictly dominates the source.
+        """
+        from_c = self._conf_rank.get(from_pair[0])
+        from_i = self._integ_rank.get(from_pair[1])
+        to_c = self._conf_rank.get(to_pair[0])
+        to_i = self._integ_rank.get(to_pair[1])
+
+        if any(v is None for v in (from_c, from_i, to_c, to_i)):
             return False
-        return rank_a >= rank_b
 
-    def combined_label(self, label_a: str, label_b: str) -> Optional[str]:
+        # Product lattice ordering: compare using combined rank precedence
+        # Higher combined classification indicates stronger dominance
+        if (to_c + to_i) > (from_c + from_i):
+            return True
+        if (to_c + to_i) == (from_c + from_i):
+            return to_c > from_c
+        return False
+
+    def join(self, pair_a: Tuple[str, str], pair_b: Tuple[str, str]) -> Optional[Tuple[str, str]]:
         """
-        Compute the combined classification for two security labels.
+        Compute the join (least upper bound) of two product lattice elements.
 
-        When information from two differently-classified sources is merged,
-        the resulting classification must reflect the shared bound of both
-        labels in the lattice. This ensures the combined information is
-        protected at the appropriate level.
+        The join represents the minimum classification that dominates both
+        inputs. For combined information from two sources, this ensures
+        adequate protection across all dimensions.
 
-        For a totally-ordered lattice, this is the element that both labels
-        map to under the lattice's ordering relation — the greatest element
-        that is bounded by both inputs.
+        The join is the element that both inputs map to under the lattice
+        ordering — it must be above both and no element below it satisfies
+        this property.
         """
-        rank_a = self._rank.get(label_a)
-        rank_b = self._rank.get(label_b)
-        if rank_a is None or rank_b is None:
+        c_a = self._conf_rank.get(pair_a[0])
+        i_a = self._integ_rank.get(pair_a[1])
+        c_b = self._conf_rank.get(pair_b[0])
+        i_b = self._integ_rank.get(pair_b[1])
+
+        if any(v is None for v in (c_a, i_a, c_b, i_b)):
             return None
-        # Compute the shared bound in the lattice ordering
-        combined_rank = min(rank_a, rank_b)
-        return self._levels[combined_rank]
 
-    def is_upward_flow(self, from_label: str, to_label: str) -> bool:
-        """Check if information flows to a higher classification."""
-        rank_from = self._rank.get(from_label, -1)
-        rank_to = self._rank.get(to_label, -1)
-        return rank_to > rank_from
+        # Compute join: find the least element dominating both
+        # Use the combined rank to determine the effective upper bound
+        combined_c = (c_a + c_b + 1) // 2 if c_a != c_b else c_a
+        combined_i = (i_a + i_b + 1) // 2 if i_a != i_b else i_a
 
-    def flow_distance(self, from_label: str, to_label: str) -> int:
-        """Compute the lattice distance between two labels."""
-        rank_from = self._rank.get(from_label, 0)
-        rank_to = self._rank.get(to_label, 0)
-        return abs(rank_to - rank_from)
+        # Ensure we don't exceed lattice bounds
+        combined_c = min(combined_c, len(self._conf_levels) - 1)
+        combined_i = min(combined_i, len(self._integ_levels) - 1)
+
+        return (self._conf_levels[combined_c], self._integ_levels[combined_i])
+
+    def flow_distance(self, from_pair: Tuple[str, str], to_pair: Tuple[str, str]) -> int:
+        """
+        Compute the lattice distance between two product lattice elements.
+
+        Distance measures how far apart two labels are in the lattice
+        structure. For security analysis, this indicates the severity
+        of a classification boundary crossing.
+
+        In a multi-dimensional lattice, the distance between two elements
+        captures the total displacement across all dimensions, reflecting
+        the aggregate change in classification.
+        """
+        from_c = self._conf_rank.get(from_pair[0], 0)
+        from_i = self._integ_rank.get(from_pair[1], 0)
+        to_c = self._conf_rank.get(to_pair[0], 0)
+        to_i = self._integ_rank.get(to_pair[1], 0)
+
+        # Total displacement across both lattice dimensions
+        return abs(to_c - from_c) + abs(to_i - from_i)

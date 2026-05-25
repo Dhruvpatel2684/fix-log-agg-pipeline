@@ -1,8 +1,8 @@
-# Lattice-Based Information Flow Analyzer — Debugging Task
+# Product Lattice Information Flow Analyzer — Debugging Task
 
 ## Overview
 
-A security analysis system processes information flow events from multiple organizational departments, classifying flows against a lattice-based security model. The system loads event streams, applies the lattice ordering to determine combined classifications, detects violations based on configurable thresholds, computes flow volumes across time windows, and produces structured JSON reports.
+A security analysis system evaluates information flows across a two-dimensional classification lattice. Each flow event carries both a confidentiality label and an integrity label, forming a product lattice where the partial order, distance metric, and join operation must account for both dimensions simultaneously. The system loads events from multiple organizational sources, deduplicates them, detects violations against the product lattice ordering, and generates structured reports.
 
 ## System Environment
 
@@ -13,29 +13,29 @@ A security analysis system processes information flow events from multiple organ
 
 ## Architecture
 
-The system consists of four processing stages:
+The system processes information flow events through four stages:
 
-1. **Loading & Merging** — Department event streams (`/app/runtime/data/*_flows.json`) are loaded and merged into a single chronological sequence. Events are sorted by timestamp, then by source department identifier, then by local sequence number for deterministic ordering when timestamps collide.
+1. **Loading & Deduplication** — Flow event streams from `/app/runtime/data/*_flows.json` are loaded and merged into a chronological sequence (sorted by timestamp, then source identifier, then local sequence number). Events are then deduplicated: events referencing the same entity from the same source stream within a time window are consolidated. Events from different sources that happen to reference the same entity are independent observations and must be preserved.
 
-2. **Filtering & Classification** — Events are filtered to only those from monitored departments (configured in `/app/runtime/config.ini` under `[lattice]`). Each flow's security classification is computed using lattice operations. In a totally-ordered security lattice, the combined classification of two labels is their **least upper bound (join/supremum)** — the higher of the two levels — ensuring merged information receives adequate protection.
+2. **Dominance Classification** — Each flow is evaluated against the product lattice ordering. The product lattice L = C × I uses **componentwise ordering**: element (c1, i1) is dominated by (c2, i2) if and only if c1 ≤ c2 AND i1 ≤ i2 (with at least one strict inequality). This is a partial order — elements where one dimension increases while the other decreases are **incomparable** and must not be classified as upward flows.
 
-3. **Violation Detection** — Flows are evaluated against the strict analysis threshold (`/app/runtime/config.ini` section `[analysis.strict]`). Any flow crossing two or more lattice levels is flagged as a violation. The violation count, combined labels, and distances are recorded.
+3. **Violation Detection** — Flows classified as upward (destination dominates source) are checked against the configured distance threshold. The distance in a product lattice is the **L-infinity (Chebyshev) metric**: the maximum of the individual dimensional displacements. A flow crossing 3 levels in confidentiality but 1 in integrity has distance 3. Only flows exceeding the threshold are violations.
 
-4. **Volume Aggregation** — Entity flow volumes are tracked across fixed time windows. Volume counters represent point-in-time snapshots: when an entity appears in a new window, that window's value supersedes (replaces) any prior window's value. The final reported volume for each entity is from its most recent window appearance.
+4. **Join Computation & Reporting** — For each violation, the combined classification is computed as the **join (least upper bound)** in the product lattice. The join of (c1, i1) and (c2, i2) is (max(c1, c2), max(i1, i2)) — the componentwise maximum. Reports are generated including violation details, flow matrices, and per-source volumes.
 
 ## Problem
 
-The system runs without errors but produces incorrect output. Reports show fewer monitored events than expected, no violations are being flagged despite clearly sensitive cross-boundary flows, flow volumes appear inflated for entities that span multiple time windows, and combined classification labels seem inverted from what the security model requires.
+The system runs without errors but produces incorrect results. The violation count is substantially higher than expected, some flows between incomparable classification labels are being incorrectly flagged, combined classification labels appear to be computed at a lower level than the correct upper bound, per-source volume totals are inconsistent with the input data, and some legitimate events from independent sources appear to be missing from the analysis.
 
 ## Expected Correct Output
 
 When functioning correctly, the system should:
 
-- Monitor all 54 events from the four configured departments (engineering, research, operations, compliance)
-- Detect 27 violations at the strict threshold (flow distance ≥ 2)
-- Report the combined classification as the **upper** label for each violating flow
-- Compute entity volumes using last-write-wins window semantics
-- Include `restricted` in the flow matrix (compliance department source label)
+- Load all 54 events and retain all 54 after deduplication (no true duplicates exist in the data)
+- Detect exactly 9 violations (flows where both dimensions increase and the Chebyshev distance exceeds 2)
+- Exclude incomparable flows (where one dimension increases but the other decreases) from violations
+- Report combined classifications as the componentwise maximum of the from/to labels
+- Report research source volume as 328 (sum of all 18 research event volumes)
 
 ## Output Schema
 
@@ -43,55 +43,51 @@ When functioning correctly, the system should:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `total_events_loaded` | int | Total events loaded from all department sources |
-| `monitored_events` | int | Events from monitored departments after filtering |
+| `total_events_loaded` | int | Total events loaded from all source files |
+| `events_after_dedup` | int | Events remaining after deduplication |
 | `total_violations` | int | Number of detected security violations |
-| `entities_with_volume` | int | Count of unique entities with computed volumes |
-| `flow_matrix_sources` | int | Number of distinct source labels in flow matrix |
+| `source_volumes` | object | Mapping of source_id to total volume |
+| `flow_matrix_size` | int | Number of distinct source confidentiality labels |
 
 ### `/app/runtime/output/violations.json`
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `violation_count` | int | Total number of violations detected |
+| `violation_count` | int | Total violations detected |
 | `violations` | array | List of violation records |
 | `violations[].event_id` | string | Unique event identifier |
-| `violations[].source_id` | string | Department that generated the event |
+| `violations[].source_id` | string | Source stream that generated the event |
 | `violations[].entity` | string | Data entity involved in the flow |
-| `violations[].from_label` | string | Source security classification |
-| `violations[].to_label` | string | Destination security classification |
-| `violations[].combined_label` | string | Lattice join of from and to labels |
-| `violations[].distance` | int | Lattice distance between labels |
-| `violations[].timestamp` | string | ISO 8601 timestamp of the event |
+| `violations[].from_conf` | string | Source confidentiality label |
+| `violations[].from_integ` | string | Source integrity label |
+| `violations[].to_conf` | string | Destination confidentiality label |
+| `violations[].to_integ` | string | Destination integrity label |
+| `violations[].combined_conf` | string | Join confidentiality (componentwise max) |
+| `violations[].combined_integ` | string | Join integrity (componentwise max) |
+| `violations[].distance` | int | Chebyshev distance between labels |
+| `violations[].timestamp` | string | ISO 8601 timestamp |
 
 ### `/app/runtime/output/flow_matrix.json`
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `<from_label>` | object | Mapping from source label to destination counts |
-| `<from_label>.<to_label>` | int | Count of flows from source to destination label |
-
-### `/app/runtime/output/volumes.json`
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `entity_volumes` | object | Mapping of entity names to their final flow volume |
-| `entity_volumes.<entity_name>` | int | Final computed volume for the entity |
+| `<from_conf>` | object | Mapping from source conf label to destination counts |
+| `<from_conf>.<to_conf>` | int | Count of flows between confidentiality levels |
 
 ## Key Files
 
 | File | Purpose |
 |------|---------|
 | `/app/runtime/run_analysis.py` | Entry point orchestrating all stages |
-| `/app/runtime/lattice.py` | Security lattice operations (ordering, combined labels) |
-| `/app/runtime/analyzer.py` | Flow analysis engine (filtering, violations, volumes) |
-| `/app/runtime/loader.py` | Event loading and merge-sorting from department files |
+| `/app/runtime/lattice.py` | Product lattice operations (dominance, join, distance) |
+| `/app/runtime/analyzer.py` | Violation detection and flow matrix computation |
+| `/app/runtime/loader.py` | Event loading, sorting, and deduplication |
 | `/app/runtime/reporter.py` | JSON report generation |
-| `/app/runtime/config.ini` | Lattice levels, monitored departments, analysis parameters |
-| `/app/runtime/data/engineering_flows.json` | Engineering department event stream |
-| `/app/runtime/data/research_flows.json` | Research department event stream |
-| `/app/runtime/data/compliance_flows.json` | Compliance department event stream |
+| `/app/runtime/config.ini` | Lattice dimensions, thresholds, dedup window |
+| `/app/runtime/data/engineering_flows.json` | Engineering source event stream |
+| `/app/runtime/data/research_flows.json` | Research source event stream |
+| `/app/runtime/data/compliance_flows.json` | Compliance source event stream |
 
 ## Your Task
 
-Identify and fix defects in the runtime source files so that the analysis produces correct output. The configuration file and data files are correct and should not be modified. Focus on the Python source modules where the processing logic resides.
+Identify and fix defects in the runtime source files so that the analysis produces correct output. The configuration file and data files are correct and should not be modified. Focus on the Python source modules where the lattice operations and deduplication logic reside.

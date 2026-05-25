@@ -2,20 +2,20 @@ author_name = "Dhruvkumar Patel"
 author_email = "dhruvpatel2284@gmail.com"
 category = "security_analysis"
 difficulty = "hard"
-tags = ["lattice-theory", "information-flow", "security-classification", "data-processing", "configuration-parsing"]
+tags = ["lattice-theory", "product-lattice", "partial-order", "information-flow", "security-classification"]
 
-difficulty_explanation = "Requires understanding lattice-theoretic concepts (join vs meet as least upper bound vs greatest lower bound), tracing data flow through multiple processing stages, identifying a subtle config parsing whitespace issue, recognizing incorrect section references, understanding window-based snapshot semantics, and fixing sort determinism — four independent bugs that interact to produce misleading output."
-solution_explanation = "Fix 1: Strip whitespace when parsing comma-delimited department list from config. Fix 2: Read violation threshold from [analysis.strict] section instead of [analysis]. Fix 3: Replace accumulating window volumes with last-write-wins semantics. Fix 4a: Change combined_label from min (meet/infimum) to max (join/supremum). Fix 4b: Add source_id to event sort key for deterministic tiebreaking."
-verification_explanation = "Tests validate output file existence, correct event counts, proper department monitoring (compliance included), violation count matching strict threshold, combined label correctness (join semantics), and window volume accuracy (last-write-wins)."
+difficulty_explanation = "Requires understanding product lattice theory: componentwise partial ordering vs scalar reduction, Chebyshev vs Manhattan distance metrics in multi-dimensional spaces, componentwise join vs midpoint averaging, and source-aware deduplication identity — four mathematically distinct bugs that implement valid but incorrect algorithms."
+solution_explanation = "Fix 1: Replace sum-based dominance comparison with componentwise AND (product lattice partial order). Fix 2: Replace averaged midpoint join with componentwise maximum (least upper bound). Fix 3: Replace Manhattan distance (L1 sum) with Chebyshev distance (L-infinity max). Fix 4: Include source_id in the deduplication key to preserve cross-source autonomy."
+verification_explanation = "Tests validate output structure, deduplication correctness (all 54 events preserved), violation count (exactly 9), exclusion of incomparable flows, Chebyshev distance values, and componentwise join labels."
 expert_time_estimate_hours = 3.0
 
 [task]
 name = "lattice-flow-repair"
-description = "Fix defects in a lattice-based information flow analysis system that processes security-classified events from multiple departments, detects violations against configurable thresholds, and computes flow volumes across time windows."
+description = "Fix defects in a product lattice security analysis system that uses two-dimensional classification (confidentiality x integrity) with componentwise ordering, Chebyshev distance, and source-aware deduplication."
 
 [task.difficulty]
 level = "hard"
-reasoning = "The task requires understanding partial order theory (join vs meet), multi-file data flow tracing, config section disambiguation, and window aggregation semantics — four conceptually distinct bugs spread across three source files."
+reasoning = "The task requires understanding product lattice partial orders (componentwise vs sum-based), L-infinity vs L1 distance metrics, the join operation in product lattices (componentwise max vs average), and identity semantics in deduplication — four conceptually distinct mathematical bugs."
 
 [task.runtime]
 entrypoint = "python3 -m runtime.run_analysis"
@@ -24,11 +24,11 @@ dependencies = "stdlib-only"
 
 [task.validator]
 command = "bash tests/test.sh"
-description = "Runs the analysis engine and validates output structure, event counts, violation detection correctness, combined label semantics, and volume computation accuracy."
+description = "Runs the analysis engine and validates deduplication, violation count, dominance correctness, distance metric, and join computation."
 
 [task.repair]
 command = "bash solution/solve.sh"
-description = "Patches analyzer.py, lattice.py, and loader.py to fix department parsing, config section, volume semantics, sort determinism, and lattice join computation, then re-runs the analysis."
+description = "Patches lattice.py and loader.py to fix dominance, join, distance, and deduplication, then re-runs the analysis."
 
 [task.resources]
 timeout = 300
