@@ -1,0 +1,37 @@
+author_name = "Dhruvkumar Patel"
+author_email = "dhruvpatel2284@gmail.com"
+category = "type_systems"
+difficulty = "hard"
+tags = ["type-theory", "variance", "generics", "subtyping", "constraint-solving"]
+
+difficulty_explanation = "Requires understanding of type variance (covariance vs contravariance), config parsing subtleties, scope-based constraint resolution, and deterministic sort ordering across multiple source modules."
+solution_explanation = "Four distinct bugs must be identified and fixed: (1) unstripped whitespace in comma-split module list filters out a source, (2) wrong config section for recursion depth causes premature termination, (3) constraint solver accumulates bounds instead of using latest per scope, (4) sort tiebreaker missing source_module for deterministic cross-module ordering."
+verification_explanation = "Tests validate structural integrity (file existence, record counts), individual variance checks (covariant/contravariant/invariant), constraint resolution correctness, and full end-to-end deterministic output."
+expert_time_estimate_hours = 3.0
+
+[task]
+name = "type-variance-repair"
+description = "A generic type assignability checker with variance-aware subtyping is producing incorrect results. Multiple defects in parsing, configuration, constraint resolution, and event ordering must be diagnosed and corrected."
+
+[task.difficulty]
+level = "hard"
+reasoning = "The task involves understanding type-theoretic concepts (covariance, contravariance, invariance), tracing data flow across four modules, identifying subtle configuration issues, and fixing a non-obvious sort stability problem."
+
+[task.runtime]
+entrypoint = "python3 -m runtime.run_checker"
+language = "python"
+dependencies = "stdlib-only"
+
+[task.validator]
+command = "bash tests/test.sh"
+description = "Runs the type checker and validates output correctness with pytest"
+
+[task.repair]
+command = "bash solution/solve.sh"
+description = "Patches all four bugs and re-runs the type checker to produce correct output"
+
+[task.resources]
+timeout = 300
+cpu = 2
+memory = "2GB"
+disk = "1GB"
