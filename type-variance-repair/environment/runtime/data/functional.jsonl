@@ -1,0 +1,9 @@
+{"id": "FN001", "source_module": "functional", "kind": "type_decl", "name": "Callable", "parent": null, "category": "functional", "timestamp": "2024-01-15T10:00:00Z", "seq": 1}
+{"id": "FN002", "source_module": "functional", "kind": "type_decl", "name": "Predicate", "parent": "Callable", "category": "functional", "timestamp": "2024-01-15T10:00:01Z", "seq": 2}
+{"id": "FN003", "source_module": "functional", "kind": "type_decl", "name": "Mapper", "parent": "Callable", "category": "functional", "timestamp": "2024-01-15T10:00:02Z", "seq": 3}
+{"id": "FN004", "source_module": "functional", "kind": "generic_decl", "name": "Supplier", "type_param": "S", "variance": "covariant", "category": "functional", "timestamp": "2024-01-15T10:00:03Z", "seq": 4}
+{"id": "FN005", "source_module": "functional", "kind": "generic_decl", "name": "Handler", "type_param": "H", "variance": "contravariant", "category": "functional", "timestamp": "2024-01-15T10:00:04Z", "seq": 5}
+{"id": "FN006", "source_module": "functional", "kind": "assignment", "target": "Supplier<Callable>", "source": "Supplier<Predicate>", "context": "return_value", "priority": 2, "category": "functional", "timestamp": "2024-01-15T10:01:00Z", "seq": 6}
+{"id": "FN007", "source_module": "functional", "kind": "assignment", "target": "Handler<Predicate>", "source": "Handler<Callable>", "context": "parameter", "priority": 2, "category": "functional", "timestamp": "2024-01-15T10:01:01Z", "seq": 7}
+{"id": "FN008", "source_module": "functional", "kind": "assignment", "target": "Supplier<Predicate>", "source": "Supplier<Callable>", "context": "return_value", "priority": 3, "category": "functional", "timestamp": "2024-01-15T10:01:02Z", "seq": 8}
+{"id": "FN009", "source_module": "functional", "kind": "assignment", "target": "Handler<Callable>", "source": "Handler<Predicate>", "context": "parameter", "priority": 3, "category": "functional", "timestamp": "2024-01-15T10:01:03Z", "seq": 9}
