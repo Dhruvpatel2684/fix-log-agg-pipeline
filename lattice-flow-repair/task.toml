@@ -1,8 +1,37 @@
-[task]
-name = "lattice-flow-repair"
-category = "temporal_reasoning"
-difficulty = "hard"
-
-[author]
 author_name = "Dhruvkumar Patel"
 author_email = "dhruvpatel2284@gmail.com"
+category = "temporal_reasoning"
+difficulty = "hard"
+tags = ["constraint-propagation", "temporal-logic", "interval-scheduling", "satisfiability", "bound-tightening"]
+
+difficulty_explanation = "Requires understanding temporal interval semantics (half-open vs closed boundaries), correct propagation direction for scheduling constraints (earliest-end vs latest-end, earliest-start vs latest-start), and fixpoint convergence requirements — four interacting bugs spread across config and two source files."
+solution_explanation = "Fix 1: Change >= to > in overlap check (half-open intervals don't overlap at boundary). Fix 2: Use succ.latest_start instead of succ.earliest_start for backward tightening. Fix 3: Use pred.earliest_end instead of pred.latest_end for forward tightening. Fix 4: Increase max_propagation_passes from 1 to 20 for fixpoint convergence."
+verification_explanation = "Tests validate satisfiability classification for 4 scenarios, specific propagated bound values, constraint satisfaction details, and identification of infeasible tasks."
+expert_time_estimate_hours = 3.0
+
+[task]
+name = "lattice-flow-repair"
+description = "Fix defects in a temporal constraint propagation scheduler that checks satisfiability of task schedules under ordering constraints by iteratively tightening feasible time windows."
+
+[task.difficulty]
+level = "hard"
+reasoning = "The task requires understanding temporal interval boundary semantics, correct bound references for bidirectional constraint propagation, and fixpoint convergence — four conceptually distinct bugs that interact across scenarios."
+
+[task.runtime]
+entrypoint = "python3 -m runtime.run_analysis"
+language = "python"
+dependencies = "stdlib-only"
+
+[task.validator]
+command = "bash tests/test.sh"
+description = "Runs the temporal analysis and validates satisfiability results, propagated bounds, and constraint details."
+
+[task.repair]
+command = "bash solution/solve.sh"
+description = "Patches intervals.py, propagator.py, and config.ini to fix overlap semantics, propagation bounds, and pass count, then re-runs analysis."
+
+[task.resources]
+timeout = 300
+cpu = 2
+memory = "2GB"
+disk = "1GB"
