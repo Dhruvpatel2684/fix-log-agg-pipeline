@@ -1,0 +1,15 @@
+{
+  "scenario_id": "alpha",
+  "description": "Linear chain with tight intervals",
+  "tasks": {
+    "build": {"earliest_start": 0, "latest_start": 5, "duration": 10},
+    "test": {"earliest_start": 10, "latest_start": 10, "duration": 5},
+    "deploy": {"earliest_start": 16, "latest_start": 20, "duration": 3},
+    "monitor": {"earliest_start": 20, "latest_start": 30, "duration": 8}
+  },
+  "constraints": [
+    {"type": "before", "from": "build", "to": "test"},
+    {"type": "before", "from": "test", "to": "deploy"},
+    {"type": "before", "from": "deploy", "to": "monitor"}
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "scenario_id": "beta",
+  "description": "Parallel tasks with shared successor",
+  "tasks": {
+    "frontend": {"earliest_start": 0, "latest_start": 3, "duration": 12},
+    "backend": {"earliest_start": 0, "latest_start": 5, "duration": 15},
+    "database": {"earliest_start": 2, "latest_start": 8, "duration": 10},
+    "integration": {"earliest_start": 10, "latest_start": 25, "duration": 6},
+    "release": {"earliest_start": 20, "latest_start": 40, "duration": 4}
+  },
+  "constraints": [
+    {"type": "before", "from": "frontend", "to": "integration"},
+    {"type": "before", "from": "backend", "to": "integration"},
+    {"type": "before", "from": "database", "to": "integration"},
+    {"type": "before", "from": "integration", "to": "release"}
+  ]
+}

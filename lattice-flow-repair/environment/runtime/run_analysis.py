@@ -1,73 +1,95 @@
 """
-Entry point for the product lattice information flow analysis system.
+Entry point for the temporal schedule analysis system.
 
-Orchestrates the loading, deduplication, analysis, and reporting stages:
-1. Initialize product lattice from configuration
-2. Load and merge source flow event streams
-3. Deduplicate events within the configured window
-4. Analyze flows for security violations using product lattice ordering
-5. Compute flow matrices and volumes
-6. Generate structured reports
+Orchestrates scenario loading, constraint propagation, satisfiability
+checking, and report generation for each configured scheduling scenario.
 """
 
+import json
+import os
 import sys
+import configparser
+from typing import List, Dict
 
 sys.path.insert(0, "/app")
 
-from runtime.lattice import ProductLattice
-from runtime.loader import load_source_events, deduplicate_events, validate_event_schema
-from runtime.analyzer import FlowAnalyzer
-from runtime.reporter import generate_reports
-import configparser
+from runtime.propagator import ConstraintPropagator
+from runtime.checker import SatisfiabilityChecker
+
+
+def load_scenarios(data_dir: str, active: List[str]) -> List[Dict]:
+    """Load scenario files matching active list."""
+    scenarios = []
+    for filename in sorted(os.listdir(data_dir)):
+        if not filename.endswith("_scenario.json"):
+            continue
+        with open(os.path.join(data_dir, filename)) as f:
+            scenario = json.load(f)
+        if scenario["scenario_id"] in active:
+            scenarios.append(scenario)
+    return scenarios
 
 
 def main():
-    """Run the full product lattice flow analysis."""
+    """Run temporal schedule analysis for all configured scenarios."""
     config_path = "/app/runtime/config.ini"
     data_dir = "/app/runtime/data"
 
     config = configparser.ConfigParser()
     config.read(config_path)
 
-    output_dir = config.get("reporting", "output_dir")
-    dedup_window = config.getint("sources", "dedup_window_seconds")
+    output_dir = config.get("analysis", "output_dir")
+    active_list = [s.strip() for s in config.get("analysis", "active_scenarios").split(",")]
 
-    # Initialize lattice and analyzer
-    lattice = ProductLattice(config_path)
-    analyzer = FlowAnalyzer(config_path, lattice)
+    os.makedirs(output_dir, exist_ok=True)
 
-    # Load all source events
-    events = load_source_events(data_dir)
+    propagator = ConstraintPropagator(config_path)
+    checker = SatisfiabilityChecker()
 
-    # Validate schema
-    valid_events = [e for e in events if validate_event_schema(e)]
+    scenarios = load_scenarios(data_dir, active_list)
 
-    # Deduplicate within window
-    deduped_events = deduplicate_events(valid_events, dedup_window)
+    results = {}
+    for scenario in scenarios:
+        sid = scenario["scenario_id"]
+        tasks = scenario["tasks"]
+        constraints = scenario["constraints"]
 
-    # Detect violations
-    violations = analyzer.detect_violations(deduped_events)
+        # Propagate constraints
+        bounds = propagator.propagate(tasks, constraints)
 
-    # Compute flow matrix
-    flow_matrix = analyzer.compute_flow_matrix(deduped_events)
+        # Check feasibility
+        feasible, infeasible_tasks = propagator.check_feasibility(bounds)
 
-    # Compute source volumes
-    source_volumes = analyzer.compute_source_volumes(deduped_events)
+        # Check ordering constraints
+        constraint_results = checker.check_ordering_constraints(bounds, constraints)
 
-    # Generate reports
-    generate_reports(
-        output_dir=output_dir,
-        events=valid_events,
-        deduplicated_events=deduped_events,
-        violations=violations,
-        flow_matrix=flow_matrix,
-        source_volumes=source_volumes
-    )
+        # Determine overall satisfiability
+        result = checker.overall_satisfiability(feasible, infeasible_tasks, constraint_results)
+        result["scenario_id"] = sid
+        result["propagated_bounds"] = bounds
 
-    print(f"Analysis complete. Reports written to {output_dir}")
-    print(f"  Total events: {len(valid_events)}")
-    print(f"  After dedup: {len(deduped_events)}")
-    print(f"  Violations: {len(violations)}")
+        results[sid] = result
+
+    # Write results
+    output_path = os.path.join(output_dir, "schedule_analysis.json")
+    with open(output_path, "w") as f:
+        json.dump(results, f, indent=2)
+
+    # Write summary
+    summary = {
+        "total_scenarios": len(scenarios),
+        "satisfiable_count": sum(1 for r in results.values() if r["satisfiable"]),
+        "unsatisfiable_count": sum(1 for r in results.values() if not r["satisfiable"]),
+        "scenario_results": {sid: r["satisfiable"] for sid, r in results.items()}
+    }
+    summary_path = os.path.join(output_dir, "summary.json")
+    with open(summary_path, "w") as f:
+        json.dump(summary, f, indent=2)
+
+    print(f"Analysis complete. Results written to {output_dir}")
+    for sid, r in results.items():
+        status = "satisfiable" if r["satisfiable"] else "UNSATISFIABLE"
+        print(f"  {sid}: {status}")
 
 
 if __name__ == "__main__":
