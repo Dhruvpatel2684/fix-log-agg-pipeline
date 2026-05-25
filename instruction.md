@@ -2,9 +2,23 @@ On May 19, 2026, the weekly certificate rotation audit on pki-audit-02 stopped p
 
 The cert-audit reconciliation pipeline on pki-audit-02 had been operating normally up to the point of the policy update. The intent was to transition the audit scope from its dry-run testing state into active rotation tracking. The changes were staged incrementally and the promotion was never fully completed. By the time the Sunday 02:00 UTC collection window opened, no new evidence had reached /var/lib/cert-audit/evidence/reconciliation.tsv and none has arrived since.
 
-Although the policy update did not necessarily break any individual component on its own, the aggregate effect of the incomplete changes is that the reconciliation tool refuses to proceed. The /opt/cert-audit/bin/reconcile-certs.sh entrypoint validates the active audit scope before doing any work and will exit immediately if it detects anything other than rotation mode. The production rotation parameters — correct evidence directory, correct output format — live in /etc/cert-audit/rotation-scope.conf, but that file is not being sourced. A lab-environment overlay at /etc/cert-audit/overrides.d/lab-defaults.conf runs after the main configuration at /etc/cert-audit/audit.conf loads and silently re-applies the QA defaults, redirecting output to staging and forcing CSV format. The shared environment loader included by every entrypoint also assigns OUTPUT_FORMAT directly, which means even if the correct format had been established by the time it runs, it would be overwritten.
+Although the policy update did not necessarily break any individual component on its own, the aggregate effect of the incomplete changes is that the reconciliation tool refuses to proceed. The /opt/cert-audit/bin/reconcile-certs.sh entrypoint validates the active audit scope before doing any work and will exit immediately if it detects anything other than rotation mode. The production rotation parameters — correct evidence directory, correct output format — live in /etc/cert-audit/rotation-scope.conf, but that file is not being sourced. A lab-environment overlay at /etc/cert-audit/overrides.d/lab-defaults.conf runs after the main configuration at /etc/cert-audit/audit.conf loads and silently re-applies the QA defaults, redirecting output to staging and forcing CSV format. The shared environment loader at /opt/cert-audit/bin/cert-env-loader.sh included by every entrypoint also assigns OUTPUT_FORMAT directly, which means even if the correct format had been established by the time it runs, it would be overwritten.
 
 Additionally, during a prior hardening pass, the infrastructure team applied a restrictive POSIX access control list to the evidence directory to prevent accidental writes by non-privileged processes. The ACL strips write permission from the directory owner entry, which means standard Unix permission bits appear normal but all write operations fail. This ACL was never relaxed after the initial evidence population, and now prevents the reconciliation tool from creating new artifacts.
+
+**Required configuration state after fixes:**
+
+In `/etc/cert-audit/audit.conf`:
+- `AUDIT_SCOPE=dry-run` must be commented out (prefixed with `#`).
+- `AUDIT_SCOPE=rotation` must be present as an active (uncommented) line.
+- The line `. /etc/cert-audit/rotation-scope.conf` must be active (uncommented) so that production overrides are sourced.
+- The line `. /etc/cert-audit/overrides.d/lab-defaults.conf` must be commented out (prefixed with `#`) so the lab overlay no longer executes.
+
+In `/opt/cert-audit/bin/cert-env-loader.sh`:
+- All active (uncommented) lines that assign `OUTPUT_FORMAT=` must be removed or commented out entirely. The loader must not set OUTPUT_FORMAT at all, so that the value established by rotation-scope.conf (tsv) is preserved.
+
+For the evidence directory `/var/lib/cert-audit/evidence`:
+- The restrictive POSIX ACL must be cleared and the directory owner must have read, write, and execute permission (rwx). After the fix, `getfacl` should show `user::rwx` for the owner entry.
 
 From where the data is coming:
 rotation-events.jsonl contains one JSON object per line with fields: event_id, cert_fingerprint, action, lag_hours, status, and timestamp.
@@ -15,8 +29,6 @@ cluster-certs.json is a JSON array of certificate objects with fields: cert_fing
 2. `/var/lib/cert-audit/evidence/audit-schema.json` — an exact byte-for-byte copy of `/opt/cert-audit/audit-schema.json`.
 3. `/opt/cert-audit/attestation.json` — a JSON object with exactly three keys: `artifact`, `sha256`, `rows`.
 4. `/opt/cert-audit/compliance-gate.json` — a JSON object with exactly two keys: `status`, `rows`.
-
-The evidence directory at /var/lib/cert-audit/evidence has a restrictive POSIX ACL that must be removed before the pipeline can create any files there.
 
 Processing rules for the reconciliation TSV:
 Rotation events in rotation-events.jsonl should be deduplicated by event_id — when the same event_id appears more than once, only the first occurrence is counted. Any rotation event referencing a cert_fingerprint that does not appear in cluster-certs.json (after excluding certificates in the "decommissioned" namespace) must be discarded entirely. For each certificate fingerprint, compute the total number of qualifying rotation events, the mean lag_hours (rounded half-up to two decimal places), and the compliance percentage as the fraction of events with status "success" (rounded half-up to two decimal places). Output rows sorted by cert_fingerprint ascending. The TSV uses tab as delimiter and its header line reads exactly: `cert_fingerprint\tcommon_name\trotation_count\tavg_lag_hours\tcompliance_pct`. Amounts and rates must have exactly two decimal digits. Unix LF line endings only. The file must end with a trailing newline.
