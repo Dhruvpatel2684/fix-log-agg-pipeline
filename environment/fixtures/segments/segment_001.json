@@ -1,0 +1,64 @@
+{
+  "segment_id": "segment_001",
+  "source_id": "node-alpha",
+  "entries": [
+    {
+      "seq_id": 1,
+      "timestamp": 1000.0,
+      "source_id": "node-alpha",
+      "payload": "system boot initiated",
+      "checksum": 2970455207
+    },
+    {
+      "seq_id": 2,
+      "timestamp": 1002.5,
+      "source_id": "node-alpha",
+      "payload": "config loaded from /etc/pipeline.conf",
+      "checksum": 3445798682
+    },
+    {
+      "seq_id": 3,
+      "timestamp": 1005.0,
+      "source_id": "node-alpha",
+      "payload": "listener started on port 8080",
+      "checksum": 3991145949
+    },
+    {
+      "seq_id": 4,
+      "timestamp": 1007.0,
+      "source_id": "node-alpha",
+      "payload": "connection accepted from 10.0.1.15",
+      "checksum": 2577280750
+    },
+    {
+      "seq_id": 5,
+      "timestamp": 1007.5,
+      "source_id": "node-alpha",
+      "payload": "heartbeat check passed",
+      "checksum": 286135943
+    },
+    {
+      "seq_id": 6,
+      "timestamp": 1009.0,
+      "source_id": "node-alpha",
+      "payload": "batch ingestion started: 150 records",
+      "checksum": 1741581415
+    },
+    {
+      "seq_id": 7,
+      "timestamp": 1010.0,
+      "source_id": "node-alpha",
+      "payload": "partition rebalance triggered",
+      "checksum": 1133315577
+    },
+    {
+      "seq_id": 8,
+      "timestamp": 1012.0,
+      "source_id": "node-alpha",
+      "payload": "checkpoint written at offset 7",
+      "checksum": 1661551940
+    }
+  ],
+  "created_at": 1000.0,
+  "closed": true
+}
