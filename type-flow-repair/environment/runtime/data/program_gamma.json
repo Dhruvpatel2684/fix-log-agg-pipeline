@@ -1,0 +1,76 @@
+{
+    "name": "program_gamma",
+    "version": "1.0.0",
+    "metadata": {
+        "description": "Complex nested function types and higher-order functions",
+        "complexity": "high"
+    },
+    "types": {},
+    "variables": {},
+    "assignments": [
+        {
+            "target": "hof_target",
+            "target_type": {"kind": "function", "params": [{"kind": "function", "params": [{"kind": "primitive", "name": "Animal", "category": "entity"}], "return": {"kind": "primitive", "name": "Animal", "category": "entity"}}], "return": {"kind": "primitive", "name": "int"}},
+            "source": "hof_source",
+            "source_type": {"kind": "function", "params": [{"kind": "function", "params": [{"kind": "primitive", "name": "Animal", "category": "entity"}], "return": {"kind": "primitive", "name": "Dog", "category": "entity"}}], "return": {"kind": "primitive", "name": "int"}},
+            "context": "HOF: Source param=(Animal)->Dog, Target param=(Animal)->Animal. BUGGY covariant: need (Animal)->Dog <: (Animal)->Animal, params Animal<:Animal YES, ret Dog<:Animal YES => VALID. CORRECT contravariant: need (Animal)->Animal <: (Animal)->Dog, params Animal<:Animal YES, ret Animal<:Dog NO => INVALID.",
+            "expected_valid": false
+        },
+        {
+            "target": "hof_target2",
+            "target_type": {"kind": "function", "params": [{"kind": "function", "params": [{"kind": "primitive", "name": "Animal", "category": "entity"}], "return": {"kind": "primitive", "name": "Dog", "category": "entity"}}], "return": {"kind": "primitive", "name": "int"}},
+            "source": "hof_source2",
+            "source_type": {"kind": "function", "params": [{"kind": "function", "params": [{"kind": "primitive", "name": "Animal", "category": "entity"}], "return": {"kind": "primitive", "name": "Animal", "category": "entity"}}], "return": {"kind": "primitive", "name": "int"}},
+            "context": "HOF: Source param=(Animal)->Animal, Target param=(Animal)->Dog. BUGGY covariant: need (Animal)->Animal <: (Animal)->Dog, ret Animal<:Dog NO => INVALID. CORRECT contravariant: need (Animal)->Dog <: (Animal)->Animal, ret Dog<:Animal YES => VALID.",
+            "expected_valid": true
+        },
+        {
+            "target": "returner_target",
+            "target_type": {"kind": "function", "params": [{"kind": "primitive", "name": "int"}], "return": {"kind": "function", "params": [{"kind": "primitive", "name": "Animal", "category": "entity"}], "return": {"kind": "primitive", "name": "void", "category": "special"}}},
+            "source": "returner_source",
+            "source_type": {"kind": "function", "params": [{"kind": "primitive", "name": "number"}], "return": {"kind": "function", "params": [{"kind": "primitive", "name": "object"}], "return": {"kind": "primitive", "name": "void", "category": "special"}}},
+            "context": "Params: number >: int (contravariant OK). Return: (object)->void <: (Animal)->void? Contravariant inner: Animal <: object YES. VALID.",
+            "expected_valid": true
+        },
+        {
+            "target": "returner_target2",
+            "target_type": {"kind": "function", "params": [{"kind": "primitive", "name": "int"}], "return": {"kind": "function", "params": [{"kind": "primitive", "name": "Dog", "category": "entity"}], "return": {"kind": "primitive", "name": "void", "category": "special"}}},
+            "source": "returner_source2",
+            "source_type": {"kind": "function", "params": [{"kind": "primitive", "name": "number"}], "return": {"kind": "function", "params": [{"kind": "primitive", "name": "Cat", "category": "entity"}], "return": {"kind": "primitive", "name": "void", "category": "special"}}},
+            "context": "Params: number >: int (OK). Return: (Cat)->void <: (Dog)->void? Contravariant: Dog <: Cat? NO. INVALID.",
+            "expected_valid": false
+        },
+        {
+            "target": "identity_fn",
+            "target_type": {"kind": "function", "params": [{"kind": "primitive", "name": "Animal", "category": "entity"}], "return": {"kind": "primitive", "name": "Animal", "category": "entity"}},
+            "source": "wider_fn",
+            "source_type": {"kind": "function", "params": [{"kind": "primitive", "name": "object"}], "return": {"kind": "primitive", "name": "Dog", "category": "entity"}},
+            "context": "Params: object >: Animal (contravariant OK). Return: Dog <: Animal (covariant OK). VALID.",
+            "expected_valid": true
+        },
+        {
+            "target": "identity_fn2",
+            "target_type": {"kind": "function", "params": [{"kind": "primitive", "name": "Animal", "category": "entity"}], "return": {"kind": "primitive", "name": "Animal", "category": "entity"}},
+            "source": "narrow_fn",
+            "source_type": {"kind": "function", "params": [{"kind": "primitive", "name": "Dog", "category": "entity"}], "return": {"kind": "primitive", "name": "object"}},
+            "context": "Params: Dog NOT >: Animal (contravariant FAILS). Return: object NOT <: Animal (covariant FAILS). INVALID.",
+            "expected_valid": false
+        },
+        {
+            "target": "ret_covariant_target",
+            "target_type": {"kind": "function", "params": [{"kind": "primitive", "name": "string"}], "return": {"kind": "primitive", "name": "number"}},
+            "source": "ret_covariant_source",
+            "source_type": {"kind": "function", "params": [{"kind": "primitive", "name": "string"}], "return": {"kind": "primitive", "name": "int"}},
+            "context": "Same params, return int <: number (covariant). VALID.",
+            "expected_valid": true
+        },
+        {
+            "target": "ret_fail_target",
+            "target_type": {"kind": "function", "params": [{"kind": "primitive", "name": "string"}], "return": {"kind": "primitive", "name": "int"}},
+            "source": "ret_fail_source",
+            "source_type": {"kind": "function", "params": [{"kind": "primitive", "name": "string"}], "return": {"kind": "primitive", "name": "number"}},
+            "context": "Same params, return number NOT <: int (covariant fails). INVALID.",
+            "expected_valid": false
+        }
+    ]
+}

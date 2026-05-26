@@ -1,0 +1,81 @@
+{
+    "name": "program_alpha",
+    "version": "1.0.0",
+    "metadata": {
+        "description": "Basic function type assignments with animal hierarchy",
+        "complexity": "medium"
+    },
+    "types": {},
+    "variables": {
+        "dog_processor": {"kind": "function", "params": [{"kind": "primitive", "name": "Dog", "category": "entity"}], "return": {"kind": "primitive", "name": "void", "category": "special"}},
+        "animal_processor": {"kind": "function", "params": [{"kind": "primitive", "name": "Animal", "category": "entity"}], "return": {"kind": "primitive", "name": "void", "category": "special"}},
+        "cat_handler": {"kind": "function", "params": [{"kind": "primitive", "name": "Cat", "category": "entity"}], "return": {"kind": "primitive", "name": "void", "category": "special"}},
+        "object_handler": {"kind": "function", "params": [{"kind": "primitive", "name": "object"}], "return": {"kind": "primitive", "name": "void", "category": "special"}}
+    },
+    "assignments": [
+        {
+            "target": "dog_handler",
+            "target_type": {"kind": "function", "params": [{"kind": "primitive", "name": "Dog", "category": "entity"}], "return": {"kind": "primitive", "name": "void", "category": "special"}},
+            "source": "animal_processor",
+            "source_type": {"kind": "function", "params": [{"kind": "primitive", "name": "Animal", "category": "entity"}], "return": {"kind": "primitive", "name": "void", "category": "special"}},
+            "context": "Assigning a function that accepts Animal to a variable expecting a function that accepts Dog",
+            "expected_valid": true
+        },
+        {
+            "target": "animal_handler",
+            "target_type": {"kind": "function", "params": [{"kind": "primitive", "name": "Animal", "category": "entity"}], "return": {"kind": "primitive", "name": "void", "category": "special"}},
+            "source": "dog_processor",
+            "source_type": {"kind": "function", "params": [{"kind": "primitive", "name": "Dog", "category": "entity"}], "return": {"kind": "primitive", "name": "void", "category": "special"}},
+            "context": "Assigning a function that accepts Dog to a variable expecting a function that accepts Animal",
+            "expected_valid": false
+        },
+        {
+            "target": "cat_callback",
+            "target_type": {"kind": "function", "params": [{"kind": "primitive", "name": "Cat", "category": "entity"}], "return": {"kind": "primitive", "name": "void", "category": "special"}},
+            "source": "animal_processor",
+            "source_type": {"kind": "function", "params": [{"kind": "primitive", "name": "Animal", "category": "entity"}], "return": {"kind": "primitive", "name": "void", "category": "special"}},
+            "context": "Assigning a function that accepts Animal to a variable expecting a function that accepts Cat",
+            "expected_valid": true
+        },
+        {
+            "target": "dog_callback",
+            "target_type": {"kind": "function", "params": [{"kind": "primitive", "name": "Dog", "category": "entity"}], "return": {"kind": "primitive", "name": "void", "category": "special"}},
+            "source": "object_handler",
+            "source_type": {"kind": "function", "params": [{"kind": "primitive", "name": "object"}], "return": {"kind": "primitive", "name": "void", "category": "special"}},
+            "context": "Assigning a function that accepts object to a variable expecting a function that accepts Dog",
+            "expected_valid": true
+        },
+        {
+            "target": "object_callback",
+            "target_type": {"kind": "function", "params": [{"kind": "primitive", "name": "object"}], "return": {"kind": "primitive", "name": "void", "category": "special"}},
+            "source": "animal_processor",
+            "source_type": {"kind": "function", "params": [{"kind": "primitive", "name": "Animal", "category": "entity"}], "return": {"kind": "primitive", "name": "void", "category": "special"}},
+            "context": "Assigning a function that accepts Animal to a variable expecting a function that accepts object",
+            "expected_valid": false
+        },
+        {
+            "target": "same_handler",
+            "target_type": {"kind": "function", "params": [{"kind": "primitive", "name": "Dog", "category": "entity"}], "return": {"kind": "primitive", "name": "void", "category": "special"}},
+            "source": "same_source",
+            "source_type": {"kind": "function", "params": [{"kind": "primitive", "name": "Dog", "category": "entity"}], "return": {"kind": "primitive", "name": "void", "category": "special"}},
+            "context": "Same function type on both sides",
+            "expected_valid": true
+        },
+        {
+            "target": "my_int",
+            "target_type": {"kind": "primitive", "name": "float"},
+            "source": "x",
+            "source_type": {"kind": "primitive", "name": "int"},
+            "context": "Assigning int to float via numeric hierarchy",
+            "expected_valid": true
+        },
+        {
+            "target": "my_animal",
+            "target_type": {"kind": "primitive", "name": "Animal", "category": "entity"},
+            "source": "fido",
+            "source_type": {"kind": "primitive", "name": "Dog", "category": "entity"},
+            "context": "Assigning Dog to Animal",
+            "expected_valid": true
+        }
+    ]
+}

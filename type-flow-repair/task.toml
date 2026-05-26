@@ -1,0 +1,25 @@
+author_name = "Dhruvkumar Patel"
+author_email = "dhruvpatel2284@gmail.com"
+category = "type_systems"
+difficulty = "hard"
+tags = ["type-inference", "subtyping", "variance", "type-checking", "gradual-types"]
+difficulty_explanation = "Requires deep understanding of type theory concepts including function type variance (contravariance vs covariance). The bug is buried in a large codebase (~2000 lines across 6 modules) among many correct subtype checks. Only one direction check is wrong, and both directions are valid concepts in different type systems, making this a conceptual rather than syntactic error."
+solution_explanation = "The fix changes one line in the _check_function_subtype method of checker.py: the parameter subtype check must be reversed from is_subtype(param_t1, param_t2) to is_subtype(param_t2, param_t1), implementing contravariant parameter checking as required by the Liskov Substitution Principle."
+verification_explanation = "The test suite contains 30 tests covering primitive hierarchy, generic covariance, return type covariance, and function parameter contravariance. With the bug, approximately 12 tests pass (those not involving function parameter variance). After the fix, all 30 tests pass, confirming correct variance behavior across all type forms."
+expert_time_estimate_hours = 3.0
+
+[task]
+name = "type-flow-repair"
+description = "Fix a type assignability checker that incorrectly validates function type assignments due to a variance direction error in the subtype relation implementation."
+
+[task.environment]
+dockerfile = "environment/Dockerfile"
+data_files = ["environment/runtime/data/program_alpha.json", "environment/runtime/data/program_beta.json", "environment/runtime/data/program_gamma.json", "environment/runtime/data/program_delta.json"]
+
+[task.tests]
+test_script = "tests/test.sh"
+test_file = "tests/test_lattice_flow.py"
+
+[task.solution]
+solve_script = "solution/solve.sh"
+repair_module = "solution/repair_lattice_flow.py"

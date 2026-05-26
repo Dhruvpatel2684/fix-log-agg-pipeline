@@ -1,0 +1,76 @@
+{
+    "name": "program_beta",
+    "version": "1.0.0",
+    "metadata": {
+        "description": "Generic containers and function types with vehicle hierarchy",
+        "complexity": "medium-high"
+    },
+    "types": {},
+    "variables": {},
+    "assignments": [
+        {
+            "target": "car_list",
+            "target_type": {"kind": "generic", "base": "List", "args": [{"kind": "primitive", "name": "Car", "category": "entity"}]},
+            "source": "some_cars",
+            "source_type": {"kind": "generic", "base": "List", "args": [{"kind": "primitive", "name": "Car", "category": "entity"}]},
+            "context": "Same generic type",
+            "expected_valid": true
+        },
+        {
+            "target": "vehicle_list",
+            "target_type": {"kind": "generic", "base": "List", "args": [{"kind": "primitive", "name": "Vehicle", "category": "entity"}]},
+            "source": "some_cars",
+            "source_type": {"kind": "generic", "base": "List", "args": [{"kind": "primitive", "name": "Car", "category": "entity"}]},
+            "context": "Covariant generic: List[Car] assignable to List[Vehicle]",
+            "expected_valid": true
+        },
+        {
+            "target": "car_list_target",
+            "target_type": {"kind": "generic", "base": "List", "args": [{"kind": "primitive", "name": "Car", "category": "entity"}]},
+            "source": "vehicles",
+            "source_type": {"kind": "generic", "base": "List", "args": [{"kind": "primitive", "name": "Vehicle", "category": "entity"}]},
+            "context": "List[Vehicle] NOT assignable to List[Car]",
+            "expected_valid": false
+        },
+        {
+            "target": "truck_fn_var",
+            "target_type": {"kind": "function", "params": [{"kind": "primitive", "name": "Truck", "category": "entity"}], "return": {"kind": "primitive", "name": "string"}},
+            "source": "vehicle_describer",
+            "source_type": {"kind": "function", "params": [{"kind": "primitive", "name": "Vehicle", "category": "entity"}], "return": {"kind": "primitive", "name": "string"}},
+            "context": "Function accepting Vehicle assigned to variable expecting function accepting Truck (contravariant params)",
+            "expected_valid": true
+        },
+        {
+            "target": "vehicle_fn_var",
+            "target_type": {"kind": "function", "params": [{"kind": "primitive", "name": "Vehicle", "category": "entity"}], "return": {"kind": "primitive", "name": "string"}},
+            "source": "truck_describer",
+            "source_type": {"kind": "function", "params": [{"kind": "primitive", "name": "Truck", "category": "entity"}], "return": {"kind": "primitive", "name": "string"}},
+            "context": "Function accepting Truck assigned to variable expecting function accepting Vehicle",
+            "expected_valid": false
+        },
+        {
+            "target": "number_fn",
+            "target_type": {"kind": "function", "params": [{"kind": "primitive", "name": "int"}], "return": {"kind": "primitive", "name": "float"}},
+            "source": "num_converter",
+            "source_type": {"kind": "function", "params": [{"kind": "primitive", "name": "number"}], "return": {"kind": "primitive", "name": "int"}},
+            "context": "Function (number)->int assigned to (int)->float: params contravariant (number>:int OK), return covariant (int<:float OK)",
+            "expected_valid": true
+        },
+        {
+            "target": "fn_list",
+            "target_type": {"kind": "generic", "base": "List", "args": [{"kind": "function", "params": [{"kind": "primitive", "name": "Dog", "category": "entity"}], "return": {"kind": "primitive", "name": "string"}}]},
+            "source": "animal_fn_list",
+            "source_type": {"kind": "generic", "base": "List", "args": [{"kind": "function", "params": [{"kind": "primitive", "name": "Animal", "category": "entity"}], "return": {"kind": "primitive", "name": "string"}}]},
+            "context": "List[(Animal)->string] assigned to List[(Dog)->string]: function subtype holds via contravariance, then covariant list",
+            "expected_valid": true
+        },
+        {
+            "target": "animal_fn_list_target",
+            "target_type": {"kind": "generic", "base": "List", "args": [{"kind": "function", "params": [{"kind": "primitive", "name": "Animal", "category": "entity"}], "return": {"kind": "primitive", "name": "string"}}]},
+            "source": "dog_fn_list",
+            "source_type": {"kind": "generic", "base": "List", "args": [{"kind": "function", "params": [{"kind": "primitive", "name": "Dog", "category": "entity"}], "return": {"kind": "primitive", "name": "string"}}]},
+            "context": "List[(Dog)->string] assigned to List[(Animal)->string]: function subtype FAILS (Dog not supertype of Animal)",
+            "expected_valid": false
+        }
+    ]
+}

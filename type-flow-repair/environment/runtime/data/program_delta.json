@@ -1,0 +1,108 @@
+{
+    "name": "program_delta",
+    "version": "1.0.0",
+    "metadata": {
+        "description": "Mixed assignments with unions, generics, and function types",
+        "complexity": "high"
+    },
+    "types": {},
+    "variables": {},
+    "assignments": [
+        {
+            "target": "processor",
+            "target_type": {"kind": "function", "params": [{"kind": "primitive", "name": "int"}], "return": {"kind": "primitive", "name": "string"}},
+            "source": "number_to_str",
+            "source_type": {"kind": "function", "params": [{"kind": "primitive", "name": "number"}], "return": {"kind": "primitive", "name": "string"}},
+            "context": "Params: number >: int (contravariant OK). Return: string = string. VALID.",
+            "expected_valid": true
+        },
+        {
+            "target": "number_proc",
+            "target_type": {"kind": "function", "params": [{"kind": "primitive", "name": "number"}], "return": {"kind": "primitive", "name": "string"}},
+            "source": "int_to_str",
+            "source_type": {"kind": "function", "params": [{"kind": "primitive", "name": "int"}], "return": {"kind": "primitive", "name": "string"}},
+            "context": "Params: int NOT >: number (contravariant FAILS). INVALID.",
+            "expected_valid": false
+        },
+        {
+            "target": "my_str",
+            "target_type": {"kind": "primitive", "name": "string"},
+            "source": "some_int",
+            "source_type": {"kind": "primitive", "name": "int"},
+            "context": "int is not subtype of string (unrelated types)",
+            "expected_valid": false
+        },
+        {
+            "target": "my_obj",
+            "target_type": {"kind": "top", "label": "object"},
+            "source": "some_dog",
+            "source_type": {"kind": "primitive", "name": "Dog", "category": "entity"},
+            "context": "Everything is subtype of object",
+            "expected_valid": true
+        },
+        {
+            "target": "my_vehicle",
+            "target_type": {"kind": "primitive", "name": "Vehicle", "category": "entity"},
+            "source": "my_truck",
+            "source_type": {"kind": "primitive", "name": "Truck", "category": "entity"},
+            "context": "Truck <: Vehicle",
+            "expected_valid": true
+        },
+        {
+            "target": "my_dog",
+            "target_type": {"kind": "primitive", "name": "Dog", "category": "entity"},
+            "source": "some_animal",
+            "source_type": {"kind": "primitive", "name": "Animal", "category": "entity"},
+            "context": "Animal NOT <: Dog",
+            "expected_valid": false
+        },
+        {
+            "target": "map_target",
+            "target_type": {"kind": "generic", "base": "Map", "args": [{"kind": "primitive", "name": "string"}, {"kind": "primitive", "name": "Animal", "category": "entity"}]},
+            "source": "dog_map",
+            "source_type": {"kind": "generic", "base": "Map", "args": [{"kind": "primitive", "name": "string"}, {"kind": "primitive", "name": "Dog", "category": "entity"}]},
+            "context": "Map[string, Dog] <: Map[string, Animal] (covariant args)",
+            "expected_valid": true
+        },
+        {
+            "target": "multi_param_target",
+            "target_type": {"kind": "function", "params": [{"kind": "primitive", "name": "Dog", "category": "entity"}, {"kind": "primitive", "name": "Car", "category": "entity"}], "return": {"kind": "primitive", "name": "bool"}},
+            "source": "multi_param_source",
+            "source_type": {"kind": "function", "params": [{"kind": "primitive", "name": "Animal", "category": "entity"}, {"kind": "primitive", "name": "Vehicle", "category": "entity"}], "return": {"kind": "primitive", "name": "bool"}},
+            "context": "Multi-param: Animal >: Dog AND Vehicle >: Car (contravariant both OK). Return same. VALID.",
+            "expected_valid": true
+        },
+        {
+            "target": "multi_param_fail",
+            "target_type": {"kind": "function", "params": [{"kind": "primitive", "name": "Animal", "category": "entity"}, {"kind": "primitive", "name": "Vehicle", "category": "entity"}], "return": {"kind": "primitive", "name": "bool"}},
+            "source": "multi_param_narrow",
+            "source_type": {"kind": "function", "params": [{"kind": "primitive", "name": "Dog", "category": "entity"}, {"kind": "primitive", "name": "Car", "category": "entity"}], "return": {"kind": "primitive", "name": "bool"}},
+            "context": "Multi-param: Dog NOT >: Animal (contravariant FAILS). INVALID.",
+            "expected_valid": false
+        },
+        {
+            "target": "union_target",
+            "target_type": {"kind": "union", "members": [{"kind": "primitive", "name": "int"}, {"kind": "primitive", "name": "string"}]},
+            "source": "just_int",
+            "source_type": {"kind": "primitive", "name": "int"},
+            "context": "int <: int|string (subtype of union member)",
+            "expected_valid": true
+        },
+        {
+            "target": "int_target",
+            "target_type": {"kind": "primitive", "name": "int"},
+            "source": "union_val",
+            "source_type": {"kind": "union", "members": [{"kind": "primitive", "name": "int"}, {"kind": "primitive", "name": "string"}]},
+            "context": "int|string NOT <: int (string is not subtype of int)",
+            "expected_valid": false
+        },
+        {
+            "target": "callback_target",
+            "target_type": {"kind": "function", "params": [{"kind": "primitive", "name": "Cat", "category": "entity"}], "return": {"kind": "primitive", "name": "Animal", "category": "entity"}},
+            "source": "flexible_fn",
+            "source_type": {"kind": "function", "params": [{"kind": "primitive", "name": "Animal", "category": "entity"}], "return": {"kind": "primitive", "name": "Cat", "category": "entity"}},
+            "context": "Params: Animal >: Cat (contravariant OK). Return: Cat <: Animal (covariant OK). VALID.",
+            "expected_valid": true
+        }
+    ]
+}
