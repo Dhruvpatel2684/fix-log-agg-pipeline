@@ -1,18 +1,55 @@
 {
-  "description": "Loop with widening - tests fixed-point convergence",
-  "initial_vars": {
-    "counter": 0,
-    "sum": 0
+  "graph": {
+    "services": ["api_gateway", "user_svc", "product_svc", "search_svc", "recommendation_svc", "analytics_svc", "cdn_svc", "db_proxy"],
+    "edges": [
+      {"source": "api_gateway", "target": "user_svc", "propagation_delay_ms": 180},
+      {"source": "api_gateway", "target": "product_svc", "propagation_delay_ms": 220},
+      {"source": "api_gateway", "target": "search_svc", "propagation_delay_ms": 300},
+      {"source": "user_svc", "target": "db_proxy", "propagation_delay_ms": 400},
+      {"source": "product_svc", "target": "db_proxy", "propagation_delay_ms": 350},
+      {"source": "product_svc", "target": "recommendation_svc", "propagation_delay_ms": 500},
+      {"source": "search_svc", "target": "recommendation_svc", "propagation_delay_ms": 450},
+      {"source": "recommendation_svc", "target": "analytics_svc", "propagation_delay_ms": 600},
+      {"source": "cdn_svc", "target": "api_gateway", "propagation_delay_ms": 100}
+    ]
   },
-  "instructions": [],
-  "loops": [
-    {
-      "modified_vars": ["counter", "sum"],
-      "narrowing_passes": 2,
-      "body": [
-        {"op": "add", "target": "counter", "left": "counter", "right": {"lo": 1, "hi": 1}},
-        {"op": "add", "target": "sum", "left": "sum", "right": {"lo": 1, "hi": 3}}
-      ]
-    }
+  "events": [
+    {"event_id": "beta_e01", "service_id": "api_gateway", "timestamp_ms": 2000, "severity": "high", "metric_name": "latency", "metric_value": 600.0, "baseline_value": 100.0, "deviation_sigma": 5.0},
+    {"event_id": "beta_e02", "service_id": "user_svc", "timestamp_ms": 2200, "severity": "high", "metric_name": "latency", "metric_value": 400.0, "baseline_value": 80.0, "deviation_sigma": 4.2},
+    {"event_id": "beta_e03", "service_id": "product_svc", "timestamp_ms": 2250, "severity": "medium", "metric_name": "error_rate", "metric_value": 0.12, "baseline_value": 0.01, "deviation_sigma": 3.3},
+    {"event_id": "beta_e04", "service_id": "db_proxy", "timestamp_ms": 2700, "severity": "critical", "metric_name": "connection_count", "metric_value": 450.0, "baseline_value": 50.0, "deviation_sigma": 6.0},
+    {"event_id": "beta_e05", "service_id": "search_svc", "timestamp_ms": 2350, "severity": "medium", "metric_name": "latency", "metric_value": 350.0, "baseline_value": 100.0, "deviation_sigma": 3.0},
+    {"event_id": "beta_e06", "service_id": "recommendation_svc", "timestamp_ms": 2400, "severity": "high", "metric_name": "error_rate", "metric_value": 0.20, "baseline_value": 0.02, "deviation_sigma": 4.0},
+    {"event_id": "beta_e07", "service_id": "analytics_svc", "timestamp_ms": 2500, "severity": "low", "metric_name": "queue_depth", "metric_value": 800.0, "baseline_value": 50.0, "deviation_sigma": 2.5},
+    {"event_id": "beta_e08", "service_id": "cdn_svc", "timestamp_ms": 6000, "severity": "high", "metric_name": "5xx_rate", "metric_value": 0.35, "baseline_value": 0.001, "deviation_sigma": 5.5},
+    {"event_id": "beta_e09", "service_id": "api_gateway", "timestamp_ms": 6050, "severity": "medium", "metric_name": "error_rate", "metric_value": 0.10, "baseline_value": 0.005, "deviation_sigma": 3.2},
+    {"event_id": "beta_e10", "service_id": "user_svc", "timestamp_ms": 6080, "severity": "medium", "metric_name": "latency", "metric_value": 250.0, "baseline_value": 80.0, "deviation_sigma": 2.8},
+    {"event_id": "beta_e11", "service_id": "product_svc", "timestamp_ms": 6090, "severity": "high", "metric_name": "error_rate", "metric_value": 0.18, "baseline_value": 0.01, "deviation_sigma": 4.1},
+    {"event_id": "beta_e12", "service_id": "search_svc", "timestamp_ms": 6100, "severity": "medium", "metric_name": "latency", "metric_value": 280.0, "baseline_value": 100.0, "deviation_sigma": 2.6},
+    {"event_id": "beta_e13", "service_id": "recommendation_svc", "timestamp_ms": 6120, "severity": "high", "metric_name": "error_rate", "metric_value": 0.22, "baseline_value": 0.02, "deviation_sigma": 3.8},
+    {"event_id": "beta_e14", "service_id": "db_proxy", "timestamp_ms": 6130, "severity": "critical", "metric_name": "cpu_usage", "metric_value": 0.98, "baseline_value": 0.40, "deviation_sigma": 5.8},
+    {"event_id": "beta_e15", "service_id": "analytics_svc", "timestamp_ms": 6200, "severity": "medium", "metric_name": "memory_usage", "metric_value": 0.89, "baseline_value": 0.55, "deviation_sigma": 2.9},
+    {"event_id": "beta_e16", "service_id": "cdn_svc", "timestamp_ms": 10000, "severity": "medium", "metric_name": "latency", "metric_value": 200.0, "baseline_value": 50.0, "deviation_sigma": 3.0},
+    {"event_id": "beta_e17", "service_id": "analytics_svc", "timestamp_ms": 10030, "severity": "low", "metric_name": "disk_io", "metric_value": 0.85, "baseline_value": 0.30, "deviation_sigma": 2.2}
+  ],
+  "ground_truth": [
+    {"event_a": "beta_e01", "event_b": "beta_e02", "relationship": "causal"},
+    {"event_a": "beta_e01", "event_b": "beta_e03", "relationship": "causal"},
+    {"event_a": "beta_e01", "event_b": "beta_e05", "relationship": "causal"},
+    {"event_a": "beta_e02", "event_b": "beta_e04", "relationship": "causal"},
+    {"event_a": "beta_e03", "event_b": "beta_e04", "relationship": "causal"},
+    {"event_a": "beta_e03", "event_b": "beta_e06", "relationship": "independent"},
+    {"event_a": "beta_e05", "event_b": "beta_e06", "relationship": "independent"},
+    {"event_a": "beta_e06", "event_b": "beta_e07", "relationship": "independent"},
+    {"event_a": "beta_e08", "event_b": "beta_e09", "relationship": "causal"},
+    {"event_a": "beta_e09", "event_b": "beta_e10", "relationship": "independent"},
+    {"event_a": "beta_e09", "event_b": "beta_e11", "relationship": "independent"},
+    {"event_a": "beta_e09", "event_b": "beta_e12", "relationship": "independent"},
+    {"event_a": "beta_e09", "event_b": "beta_e13", "relationship": "independent"},
+    {"event_a": "beta_e09", "event_b": "beta_e14", "relationship": "independent"},
+    {"event_a": "beta_e10", "event_b": "beta_e14", "relationship": "independent"},
+    {"event_a": "beta_e11", "event_b": "beta_e13", "relationship": "independent"},
+    {"event_a": "beta_e13", "event_b": "beta_e15", "relationship": "independent"},
+    {"event_a": "beta_e16", "event_b": "beta_e17", "relationship": "independent"}
   ]
 }

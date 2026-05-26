@@ -1,23 +1,45 @@
 {
-  "description": "Simple branch merge - tests control flow join semantics",
-  "initial_vars": {
-    "x": {"lo": 0, "hi": 10},
-    "y": {"lo": 5, "hi": 15},
-    "z": 0
+  "graph": {
+    "services": ["gateway", "auth_svc", "order_svc", "inventory_svc", "payment_svc", "notification_svc", "cache_svc"],
+    "edges": [
+      {"source": "gateway", "target": "auth_svc", "propagation_delay_ms": 200},
+      {"source": "gateway", "target": "order_svc", "propagation_delay_ms": 300},
+      {"source": "auth_svc", "target": "cache_svc", "propagation_delay_ms": 150},
+      {"source": "order_svc", "target": "inventory_svc", "propagation_delay_ms": 500},
+      {"source": "order_svc", "target": "payment_svc", "propagation_delay_ms": 400},
+      {"source": "payment_svc", "target": "notification_svc", "propagation_delay_ms": 250},
+      {"source": "inventory_svc", "target": "notification_svc", "propagation_delay_ms": 350}
+    ]
   },
-  "instructions": [
-    {
-      "op": "branch",
-      "then_block": [
-        {"op": "add", "target": "x", "left": "x", "right": {"lo": 2, "hi": 3}},
-        {"op": "assign", "target": "z", "value": {"lo": 10, "hi": 20}}
-      ],
-      "else_block": [
-        {"op": "sub", "target": "x", "left": "x", "right": {"lo": 1, "hi": 4}},
-        {"op": "assign", "target": "z", "value": {"lo": -5, "hi": 5}}
-      ]
-    },
-    {"op": "add", "target": "result", "left": "x", "right": "z"}
+  "events": [
+    {"event_id": "alpha_e01", "service_id": "gateway", "timestamp_ms": 1000, "severity": "high", "metric_name": "latency", "metric_value": 450.0, "baseline_value": 120.0, "deviation_sigma": 4.2},
+    {"event_id": "alpha_e02", "service_id": "auth_svc", "timestamp_ms": 1250, "severity": "high", "metric_name": "latency", "metric_value": 380.0, "baseline_value": 90.0, "deviation_sigma": 3.8},
+    {"event_id": "alpha_e03", "service_id": "order_svc", "timestamp_ms": 1400, "severity": "medium", "metric_name": "error_rate", "metric_value": 0.15, "baseline_value": 0.01, "deviation_sigma": 3.1},
+    {"event_id": "alpha_e04", "service_id": "inventory_svc", "timestamp_ms": 2100, "severity": "high", "metric_name": "latency", "metric_value": 520.0, "baseline_value": 100.0, "deviation_sigma": 4.5},
+    {"event_id": "alpha_e05", "service_id": "payment_svc", "timestamp_ms": 1900, "severity": "critical", "metric_name": "error_rate", "metric_value": 0.45, "baseline_value": 0.02, "deviation_sigma": 5.1},
+    {"event_id": "alpha_e06", "service_id": "notification_svc", "timestamp_ms": 2200, "severity": "medium", "metric_name": "latency", "metric_value": 300.0, "baseline_value": 80.0, "deviation_sigma": 2.9},
+    {"event_id": "alpha_e07", "service_id": "cache_svc", "timestamp_ms": 1500, "severity": "low", "metric_name": "memory_usage", "metric_value": 0.92, "baseline_value": 0.65, "deviation_sigma": 2.3},
+    {"event_id": "alpha_e08", "service_id": "gateway", "timestamp_ms": 5000, "severity": "medium", "metric_name": "requests_per_second", "metric_value": 50.0, "baseline_value": 200.0, "deviation_sigma": 3.0},
+    {"event_id": "alpha_e09", "service_id": "inventory_svc", "timestamp_ms": 5050, "severity": "high", "metric_name": "error_rate", "metric_value": 0.30, "baseline_value": 0.01, "deviation_sigma": 4.0},
+    {"event_id": "alpha_e10", "service_id": "notification_svc", "timestamp_ms": 5100, "severity": "medium", "metric_name": "queue_depth", "metric_value": 1500.0, "baseline_value": 100.0, "deviation_sigma": 3.5},
+    {"event_id": "alpha_e11", "service_id": "payment_svc", "timestamp_ms": 5080, "severity": "high", "metric_name": "latency", "metric_value": 800.0, "baseline_value": 150.0, "deviation_sigma": 4.8},
+    {"event_id": "alpha_e12", "service_id": "order_svc", "timestamp_ms": 8000, "severity": "critical", "metric_name": "error_rate", "metric_value": 0.60, "baseline_value": 0.01, "deviation_sigma": 6.0},
+    {"event_id": "alpha_e13", "service_id": "payment_svc", "timestamp_ms": 8100, "severity": "critical", "metric_name": "5xx_rate", "metric_value": 0.50, "baseline_value": 0.005, "deviation_sigma": 5.5},
+    {"event_id": "alpha_e14", "service_id": "notification_svc", "timestamp_ms": 8150, "severity": "high", "metric_name": "error_rate", "metric_value": 0.25, "baseline_value": 0.01, "deviation_sigma": 3.9}
   ],
-  "loops": []
+  "ground_truth": [
+    {"event_a": "alpha_e01", "event_b": "alpha_e02", "relationship": "causal"},
+    {"event_a": "alpha_e01", "event_b": "alpha_e03", "relationship": "causal"},
+    {"event_a": "alpha_e03", "event_b": "alpha_e04", "relationship": "causal"},
+    {"event_a": "alpha_e03", "event_b": "alpha_e05", "relationship": "causal"},
+    {"event_a": "alpha_e05", "event_b": "alpha_e06", "relationship": "causal"},
+    {"event_a": "alpha_e02", "event_b": "alpha_e07", "relationship": "causal"},
+    {"event_a": "alpha_e08", "event_b": "alpha_e09", "relationship": "independent"},
+    {"event_a": "alpha_e08", "event_b": "alpha_e10", "relationship": "independent"},
+    {"event_a": "alpha_e08", "event_b": "alpha_e11", "relationship": "independent"},
+    {"event_a": "alpha_e09", "event_b": "alpha_e10", "relationship": "independent"},
+    {"event_a": "alpha_e12", "event_b": "alpha_e13", "relationship": "causal"},
+    {"event_a": "alpha_e12", "event_b": "alpha_e14", "relationship": "causal"},
+    {"event_a": "alpha_e13", "event_b": "alpha_e14", "relationship": "causal"}
+  ]
 }

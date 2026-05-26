@@ -1,95 +1,70 @@
-# Abstract Interval Analysis System — Debugging Task
+# Lattice Flow Anomaly Correlation Engine
 
 ## Overview
 
-A static analysis system computes abstract interval approximations of program variables by interpreting structured execution traces over an interval domain. The system handles sequential assignments, conditional branches, and loops with widening for termination guarantees.
+The Lattice Flow system is a distributed monitoring anomaly correlator. It processes anomaly events detected across a microservice dependency graph and determines which anomalies are **causally related** (one failure propagated through service dependencies to cause another) versus **coincidental** (temporally proximate but not causally linked).
 
-## System Environment
-
-- **Language**: Python 3.11
-- **Runtime**: `/app/runtime/` (source, configuration, data, output)
-- **Global system-wide tooling**: `uv` and `pytest` are available
-- **No external dependencies**: stdlib only
+The system ingests trace datasets containing:
+- A directed service dependency graph with propagation delay annotations on each edge
+- A set of anomaly events detected at various services with timestamps
+- Ground truth labels for evaluation
 
 ## Architecture
 
-The system processes program traces through the following stages:
+The system consists of the following modules:
 
-1. **Initialization** — Variable bounds are set from trace specifications.
+| Module | Path | Responsibility |
+|--------|------|----------------|
+| Graph | `/app/runtime/graph.py` | Service dependency graph representation with reachability, shortest path, and delay computation |
+| Events | `/app/runtime/events.py` | Anomaly event parsing, timeline management, and ground truth label storage |
+| Correlator | `/app/runtime/correlator.py` | Core correlation engine that classifies event pairs as causal or independent |
+| Aggregator | `/app/runtime/aggregator.py` | Aggregates correlation results into reports with causal chain detection |
+| Metrics | `/app/runtime/metrics.py` | Computes precision, recall, F1, and confusion matrices against ground truth |
+| Runner | `/app/runtime/run_analysis.py` | Entry point that orchestrates the full analysis across trace datasets |
 
-2. **Sequential Transfer** — Arithmetic operations (add, sub, mul) are applied using interval arithmetic transfer functions.
+## Data Format
 
-3. **Branch Processing** — Conditional branches split execution into then/else paths. Each path is analyzed independently. At the merge point after the branch, the abstract state must soundly represent all values that could result from either path.
-
-4. **Loop Analysis** — Loops are analyzed using Kleene iteration with widening. The loop body is repeatedly applied until a post-fixed point is reached. Widening accelerates convergence by extrapolating unstable bounds to infinity. Narrowing then refines the over-approximation.
-
-5. **Reporting** — Final abstract values for all variables are written as structured JSON.
-
-## Abstract Domain
-
-The interval domain represents sets of integers as closed intervals `[lo, hi]`. Special elements:
-- **Bottom** (⊥): the empty set — represents unreachable states
-- **Top** (⊤): all integers — `[-∞, +∞]`
-
-The domain forms a complete lattice ordered by subset inclusion.
-
-## Soundness Requirement
-
-The analysis must produce a **sound over-approximation**: the abstract interval for each variable must CONTAIN every concrete value that could occur during any actual execution of the trace. Under-approximation (missing possible values) is unsound and constitutes a correctness defect.
-
-## Problem
-
-The system runs without errors but produces intervals that are too narrow in traces involving conditional branches. Some variables that should have wide ranges are being computed with restricted bounds, and some variables that should be non-empty intervals are being reported as bottom (empty). The analysis appears to under-approximate rather than over-approximate at certain program points.
-
-## Expected Correct Output
-
-The analysis should produce sound over-approximations for all traces:
-- **trace_alpha**: After a branch where x is increased on one path and decreased on the other, x must span the full range of both paths
-- **trace_beta**: Loop variables must widen to reflect unbounded iteration
-- **trace_gamma**: A loop containing a branch that both increments and decrements a variable must produce a wide (unbounded) interval
-- **trace_delta**: Nested branches must propagate ranges from all sub-paths
-
-## Output Schema
-
-### `/app/runtime/output/summary.json`
+Trace files are located at `/app/runtime/data/trace_*.json` with this schema:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `total_traces` | int | Number of traces analyzed |
-| `trace_ids` | array | List of trace identifiers |
-| `variables_per_trace` | object | Map of trace_id to list of variable names |
+| `graph.services` | `string[]` | List of service identifiers |
+| `graph.edges` | `object[]` | Directed edges with `source`, `target`, `propagation_delay_ms` |
+| `events` | `object[]` | Anomaly events with `event_id`, `service_id`, `timestamp_ms`, `severity`, `metric_name`, `metric_value`, `baseline_value`, `deviation_sigma` |
+| `ground_truth` | `object[]` | Labels with `event_a`, `event_b`, `relationship` (causal/independent) |
 
-### `/app/runtime/output/analysis_results.json`
-
-Top-level object keyed by trace_id. Each entry contains:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `trace_id` | string | Trace identifier |
-| `description` | string | Human-readable trace description |
-| `variables` | object | Map of variable name to abstract interval |
-
-Each variable entry in `variables`:
+## Correlation Output Schema
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `type` | string | Either "interval" or "bottom" |
-| `lo` | int or null | Lower bound (null = -∞), absent if bottom |
-| `hi` | int or null | Upper bound (null = +∞), absent if bottom |
+| `event_a_id` | `string` | First event identifier |
+| `event_b_id` | `string` | Second event identifier |
+| `classification` | `string` | One of: `causal`, `independent` |
+| `confidence` | `float` | Confidence score [0, 1] |
+| `path` | `string[]` | Service path if causal |
+| `propagation_delay_ms` | `float` | Estimated propagation delay |
 
-## Key Files
+## Evaluation Metrics Schema
 
-| File | Purpose |
-|------|---------|
-| `/app/runtime/run_analysis.py` | Entry point — loads traces, runs analyzer, writes output |
-| `/app/runtime/domain.py` | Interval domain — lattice operations, transfer functions, merge |
-| `/app/runtime/analyzer.py` | Trace analyzer — processes instructions, branches, loops |
-| `/app/runtime/config.ini` | Analysis parameters (widening delay, max iterations) |
-| `/app/runtime/data/trace_alpha.json` | Simple branch merge trace |
-| `/app/runtime/data/trace_beta.json` | Loop with widening trace |
-| `/app/runtime/data/trace_gamma.json` | Branch inside loop trace |
-| `/app/runtime/data/trace_delta.json` | Nested branches trace |
+| Metric | Description |
+|--------|-------------|
+| `precision` | Fraction of predicted causal pairs that are truly causal |
+| `recall` | Fraction of truly causal pairs that are correctly predicted |
+| `f1_score` | Harmonic mean of precision and recall |
+| `true_positives` | Correctly identified causal pairs |
+| `false_positives` | Independent pairs incorrectly labeled causal |
+| `true_negatives` | Correctly identified independent pairs |
+| `false_negatives` | Causal pairs incorrectly labeled independent |
 
-## Your Task
+## Known Issue
 
-Identify and fix the defect in the runtime source files so that the analysis produces sound over-approximations. The configuration and data files are correct. Focus on the abstract domain operations and how they are used at control flow merge points.
+The correlation engine is producing an excessive number of false positives — it classifies many event pairs as causally related when they should be independent. This results in low precision scores across all trace datasets. The recall is acceptable but precision degrades significantly when events from connected services occur in rapid succession.
+
+## Running the Analysis
+
+```bash
+cd /app
+python -m runtime.run_analysis
+```
+
+## Global system-wide tooling: uv and pytest are available.
