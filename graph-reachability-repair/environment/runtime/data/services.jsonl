@@ -1,0 +1,9 @@
+{"id": "E001", "source": "api-gateway", "target": "auth-service", "category": "service", "weight": 1, "subsystem": "services", "timestamp": "2024-03-01T10:00:00Z", "seq": 1}
+{"id": "E002", "source": "auth-service", "target": "user-db", "category": "service", "weight": 1, "subsystem": "services", "timestamp": "2024-03-01T10:00:01Z", "seq": 2}
+{"id": "E003", "source": "user-db", "target": "cache-layer", "category": "service", "weight": 1, "subsystem": "services", "timestamp": "2024-03-01T10:00:02Z", "seq": 3}
+{"id": "E004", "source": "cache-layer", "target": "auth-service", "category": "service", "weight": 1, "subsystem": "services", "timestamp": "2024-03-01T10:00:03Z", "seq": 4}
+{"id": "E005", "source": "api-gateway", "target": "order-service", "category": "service", "weight": 2, "subsystem": "services", "timestamp": "2024-03-01T10:00:04Z", "seq": 5}
+{"id": "E006", "source": "order-service", "target": "payment-service", "category": "service", "weight": 1, "subsystem": "services", "timestamp": "2024-03-01T10:00:05Z", "seq": 6}
+{"id": "E007", "source": "payment-service", "target": "order-service", "category": "service", "weight": 1, "subsystem": "services", "timestamp": "2024-03-01T10:00:06Z", "seq": 7}
+{"id": "E008", "source": "order-service", "target": "inventory-db", "category": "service", "weight": 1, "subsystem": "services", "timestamp": "2024-03-01T10:00:07Z", "seq": 8}
+{"id": "E009", "source": "api-gateway", "target": "notification-service", "category": "service", "weight": 1, "subsystem": "services", "timestamp": "2024-03-01T10:00:08Z", "seq": 9}

@@ -1,0 +1,37 @@
+author_name = "Dhruvkumar Patel"
+author_email = "dhruvpatel2284@gmail.com"
+category = "graph_algorithms"
+difficulty = "hard"
+tags = ["graph-theory", "strongly-connected-components", "directed-graphs", "condensation", "reachability"]
+
+difficulty_explanation = "Requires understanding the mathematical distinction between strongly connected components (mutual directed reachability) and weakly connected components (undirected reachability). The core bug implements the wrong graph-theoretic concept — fixing it requires replacing BFS with Kosaraju's two-pass DFS algorithm, which is a structural code change, not a value swap."
+solution_explanation = "Four bugs: (1) whitespace in config category list excludes queue edges, (2) SCC algorithm uses undirected BFS (finding WCCs) instead of Kosaraju's algorithm (finding SCCs) — requires implementing two-pass DFS, (3) condensation DAG edges are inverted (tgt->src instead of src->tgt), (4) sort key missing subsystem field for deterministic ordering."
+verification_explanation = "Tests validate component count (7 SCCs vs 1 WCC), specific SCC membership (directed cycles), singleton isolation (no-incoming nodes), condensation edge count and acyclicity, and aggregate statistics."
+expert_time_estimate_hours = 3.5
+
+[task]
+name = "graph-reachability-repair"
+description = "A directed graph analysis system computing strongly connected components and condensation DAGs is producing incorrect results. The SCC algorithm, condensation construction, edge filtering, and output ordering all contain defects requiring diagnosis and correction."
+
+[task.difficulty]
+level = "hard"
+reasoning = "The core bug implements weakly connected component detection (undirected BFS) instead of strongly connected component detection (Kosaraju's algorithm). Both are valid graph decompositions but produce fundamentally different results. The fix requires replacing the entire traversal algorithm with a two-pass directed DFS approach — not a single-line change."
+
+[task.runtime]
+entrypoint = "python3 -m runtime.run_analysis"
+language = "python"
+dependencies = "stdlib-only"
+
+[task.validator]
+command = "bash tests/test.sh"
+description = "Runs graph analysis and validates SCC decomposition correctness with pytest"
+
+[task.repair]
+command = "bash solution/solve.sh"
+description = "Patches all defects including SCC algorithm replacement, and re-runs analysis"
+
+[task.resources]
+timeout = 300
+cpu = 2
+memory = "2GB"
+disk = "1GB"

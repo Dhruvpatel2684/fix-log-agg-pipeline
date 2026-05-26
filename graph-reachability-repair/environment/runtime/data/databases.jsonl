@@ -1,0 +1,6 @@
+{"id": "E010", "source": "user-db", "target": "replica-db", "category": "database", "weight": 1, "subsystem": "databases", "timestamp": "2024-03-01T10:00:00Z", "seq": 1}
+{"id": "E011", "source": "replica-db", "target": "analytics-db", "category": "database", "weight": 1, "subsystem": "databases", "timestamp": "2024-03-01T10:00:01Z", "seq": 2}
+{"id": "E012", "source": "analytics-db", "target": "replica-db", "category": "database", "weight": 1, "subsystem": "databases", "timestamp": "2024-03-01T10:00:02Z", "seq": 3}
+{"id": "E013", "source": "inventory-db", "target": "warehouse-db", "category": "database", "weight": 2, "subsystem": "databases", "timestamp": "2024-03-01T10:00:03Z", "seq": 4}
+{"id": "E014", "source": "warehouse-db", "target": "inventory-db", "category": "database", "weight": 1, "subsystem": "databases", "timestamp": "2024-03-01T10:00:04Z", "seq": 5}
+{"id": "E015", "source": "warehouse-db", "target": "analytics-db", "category": "database", "weight": 1, "subsystem": "databases", "timestamp": "2024-03-01T10:00:05Z", "seq": 6}

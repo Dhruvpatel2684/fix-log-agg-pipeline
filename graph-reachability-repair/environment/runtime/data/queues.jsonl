@@ -1,0 +1,5 @@
+{"id": "E016", "source": "order-service", "target": "event-queue", "category": "queue", "weight": 1, "subsystem": "queues", "timestamp": "2024-03-01T10:00:00Z", "seq": 1}
+{"id": "E017", "source": "event-queue", "target": "notification-service", "category": "queue", "weight": 1, "subsystem": "queues", "timestamp": "2024-03-01T10:00:01Z", "seq": 2}
+{"id": "E018", "source": "notification-service", "target": "event-queue", "category": "queue", "weight": 1, "subsystem": "queues", "timestamp": "2024-03-01T10:00:02Z", "seq": 3}
+{"id": "E019", "source": "event-queue", "target": "log-sink", "category": "queue", "weight": 1, "subsystem": "queues", "timestamp": "2024-03-01T10:00:03Z", "seq": 4}
+{"id": "E020", "source": "payment-service", "target": "event-queue", "category": "queue", "weight": 1, "subsystem": "queues", "timestamp": "2024-03-01T10:00:04Z", "seq": 5}
