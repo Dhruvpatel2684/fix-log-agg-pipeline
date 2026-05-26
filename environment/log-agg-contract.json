@@ -1,0 +1,26 @@
+{
+  "sidecar_contract_json": {
+    "path": "/var/lib/log-agg/output/log-agg-contract.json",
+    "content": "byte-for-byte copy of /app/log-agg-contract.json"
+  },
+  "aggregated_csv": {
+    "path": "/var/lib/log-agg/output/aggregated.csv",
+    "delimiter": "|",
+    "header": "Endpoint ID|Endpoint Name|Total Requests|Avg Response Ms|Error Rate",
+    "columns": ["Endpoint ID", "Endpoint Name", "Total Requests", "Avg Response Ms", "Error Rate"],
+    "sort": "data rows sorted by endpoint_id ascending"
+  },
+  "report_json": {
+    "path": "/app/report.json",
+    "required_keys": ["artifact", "sha256", "rows"],
+    "artifact": "absolute path to aggregated.csv",
+    "sha256": "lowercase hexadecimal digest of aggregated.csv bytes",
+    "rows": "integer count of data rows excluding the header line"
+  },
+  "status_json": {
+    "path": "/app/status.json",
+    "required_keys": ["status", "rows"],
+    "status": "OK",
+    "rows": "integer, must equal report.json rows"
+  }
+}
