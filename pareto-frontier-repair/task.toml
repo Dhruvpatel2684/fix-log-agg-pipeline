@@ -1,0 +1,36 @@
+author_name = "Dhruvkumar Patel"
+author_email = "dhruvpatel2284@gmail.com"
+category = "optimization"
+difficulty = "hard"
+tags = ["pareto-optimality", "multi-objective", "dominance-relations", "non-dominated-sorting", "normalization"]
+difficulty_explanation = "Requires understanding Pareto dominance semantics: weak dominance (all>=, at least one>) vs strict dominance (all strictly>), incremental vs two-pass normalization, and non-dominated sorting vs lexicographic ordering. Bug 2 implements strict dominance with a convincing optimization justification. Bug 3 and Bug 2 require understanding the difference between total ordering and partial ordering (non-dominated fronts). The fingerprint test creates coupling that requires all bugs fixed simultaneously."
+solution_explanation = "The oracle re-processes solutions with correct two-pass normalization (compute all bounds first), weak Pareto dominance (all>=, at least one>), non-dominated sorting for ranking, and correct fingerprint computation."
+verification_explanation = "14 tests in 4 tiers: structural checks pass with buggy code, normalization tests need Bug 1 fixed, dominance/ranking tests need Bugs 2-3 fixed, and fingerprint tests need all bugs fixed simultaneously."
+expert_time_estimate_hours = 2.5
+
+[task]
+name = "pareto-frontier-repair"
+description = "Debug a broken multi-objective optimization analyzer that incorrectly computes Pareto frontiers due to bugs in objective normalization, dominance relation semantics, and frontier ranking logic."
+
+[task.difficulty]
+level = "hard"
+reasoning = "The core bug implements strict dominance (all components strictly greater) instead of weak Pareto dominance (all >=, at least one >). Both are valid dominance relations in optimization theory with plausible justifications. The misleading docstring provides a convincing rationale for the strict criterion. Additionally, the normalization bug requires understanding two-pass vs one-pass processing, and the ranking bug requires non-dominated sorting knowledge."
+
+[task.runtime]
+entrypoint = "python3 /app/runtime/pareto_engine.py"
+language = "python"
+dependencies = "stdlib-only"
+
+[task.validator]
+command = "bash tests/test.sh"
+description = "Runs Pareto analysis and validates frontier correctness with pytest"
+
+[task.repair]
+command = "bash solution/solve.sh"
+description = "Patches all defects and re-runs analysis with correct Pareto dominance"
+
+[task.resources]
+timeout = 300
+cpu = 2
+memory = "2GB"
+disk = "1GB"
