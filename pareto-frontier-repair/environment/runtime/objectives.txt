@@ -1,0 +1,31 @@
+# Multi-Objective Optimization Results - 4 objectives (latency, throughput, cost, reliability)
+# Format: SOLUTION_ID|EVALUATOR|OBJ_TYPE|VALUES
+# VALUES: comma-separated objective scores (higher is better for all after normalization)
+# OBJ_TYPE: RAW (needs normalization), NORMALIZED (already in [0,1]), AGGREGATE (combined from multiple evaluators)
+S01|eval_alpha|RAW|45,8200,120,0.94
+S02|eval_alpha|RAW|32,9100,95,0.97
+S03|eval_alpha|RAW|38,8800,110,0.96
+S04|eval_beta|RAW|50,7500,80,0.92
+S05|eval_beta|RAW|28,9500,140,0.98
+S06|eval_beta|RAW|42,8000,100,0.95
+S07|eval_gamma|RAW|35,9200,130,0.97
+S08|eval_gamma|RAW|48,7800,85,0.93
+S09|eval_gamma|RAW|30,9400,145,0.99
+S10|eval_alpha|RAW|55,7000,75,0.90
+S11|eval_alpha|RAW|25,9600,150,0.99
+S12|eval_beta|RAW|40,8500,105,0.95
+S13|eval_beta|RAW|33,9000,125,0.97
+S14|eval_gamma|RAW|44,8100,90,0.94
+S15|eval_gamma|RAW|37,8900,115,0.96
+S16|eval_alpha|AGGREGATE|45,8200,120,0.94
+S17|eval_beta|AGGREGATE|42,8000,100,0.95
+S18|eval_gamma|AGGREGATE|35,9200,130,0.97
+S19|eval_alpha|RAW|39,8700,108,0.96
+S20|eval_beta|RAW|46,7900,88,0.93
+S21|eval_gamma|RAW|31,9300,138,0.98
+S22|eval_alpha|RAW|52,7200,78,0.91
+S23|eval_beta|RAW|36,8950,118,0.96
+S24|eval_gamma|RAW|43,8150,92,0.94
+S25|eval_alpha|NORMALIZED|0.35,0.82,0.60,0.94
+S26|eval_beta|NORMALIZED|0.68,0.55,0.85,0.91
+S27|eval_gamma|NORMALIZED|0.50,0.75,0.70,0.97
