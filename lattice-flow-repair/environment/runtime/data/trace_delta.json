@@ -1,0 +1,61 @@
+{
+  "graph": {
+    "services": ["ingress", "auth_proxy", "billing_svc", "subscription_svc", "usage_svc", "invoice_svc", "ledger_svc", "webhook_svc"],
+    "edges": [
+      {"source": "ingress", "target": "auth_proxy", "propagation_delay_ms": 150},
+      {"source": "auth_proxy", "target": "billing_svc", "propagation_delay_ms": 300},
+      {"source": "auth_proxy", "target": "subscription_svc", "propagation_delay_ms": 250},
+      {"source": "billing_svc", "target": "usage_svc", "propagation_delay_ms": 400},
+      {"source": "billing_svc", "target": "invoice_svc", "propagation_delay_ms": 500},
+      {"source": "subscription_svc", "target": "usage_svc", "propagation_delay_ms": 350},
+      {"source": "usage_svc", "target": "ledger_svc", "propagation_delay_ms": 450},
+      {"source": "invoice_svc", "target": "webhook_svc", "propagation_delay_ms": 300},
+      {"source": "ledger_svc", "target": "webhook_svc", "propagation_delay_ms": 200}
+    ]
+  },
+  "events": [
+    {"event_id": "delta_e01", "service_id": "ingress", "timestamp_ms": 1500, "severity": "high", "metric_name": "latency", "metric_value": 500.0, "baseline_value": 40.0, "deviation_sigma": 5.5},
+    {"event_id": "delta_e02", "service_id": "auth_proxy", "timestamp_ms": 1700, "severity": "high", "metric_name": "latency", "metric_value": 350.0, "baseline_value": 60.0, "deviation_sigma": 4.5},
+    {"event_id": "delta_e03", "service_id": "billing_svc", "timestamp_ms": 2050, "severity": "critical", "metric_name": "error_rate", "metric_value": 0.35, "baseline_value": 0.01, "deviation_sigma": 5.8},
+    {"event_id": "delta_e04", "service_id": "subscription_svc", "timestamp_ms": 2000, "severity": "high", "metric_name": "latency", "metric_value": 400.0, "baseline_value": 80.0, "deviation_sigma": 4.2},
+    {"event_id": "delta_e05", "service_id": "usage_svc", "timestamp_ms": 2500, "severity": "high", "metric_name": "error_rate", "metric_value": 0.28, "baseline_value": 0.02, "deviation_sigma": 4.8},
+    {"event_id": "delta_e06", "service_id": "invoice_svc", "timestamp_ms": 2600, "severity": "medium", "metric_name": "latency", "metric_value": 450.0, "baseline_value": 100.0, "deviation_sigma": 3.5},
+    {"event_id": "delta_e07", "service_id": "ledger_svc", "timestamp_ms": 3000, "severity": "high", "metric_name": "error_rate", "metric_value": 0.22, "baseline_value": 0.01, "deviation_sigma": 4.0},
+    {"event_id": "delta_e08", "service_id": "webhook_svc", "timestamp_ms": 3100, "severity": "medium", "metric_name": "queue_depth", "metric_value": 1200.0, "baseline_value": 80.0, "deviation_sigma": 3.0},
+    {"event_id": "delta_e09", "service_id": "ingress", "timestamp_ms": 6000, "severity": "medium", "metric_name": "requests_per_second", "metric_value": 40.0, "baseline_value": 300.0, "deviation_sigma": 3.2},
+    {"event_id": "delta_e10", "service_id": "billing_svc", "timestamp_ms": 6030, "severity": "high", "metric_name": "cpu_usage", "metric_value": 0.97, "baseline_value": 0.35, "deviation_sigma": 4.8},
+    {"event_id": "delta_e11", "service_id": "subscription_svc", "timestamp_ms": 6020, "severity": "medium", "metric_name": "memory_usage", "metric_value": 0.91, "baseline_value": 0.55, "deviation_sigma": 2.9},
+    {"event_id": "delta_e12", "service_id": "usage_svc", "timestamp_ms": 6050, "severity": "high", "metric_name": "latency", "metric_value": 550.0, "baseline_value": 90.0, "deviation_sigma": 4.5},
+    {"event_id": "delta_e13", "service_id": "invoice_svc", "timestamp_ms": 6060, "severity": "medium", "metric_name": "error_rate", "metric_value": 0.15, "baseline_value": 0.01, "deviation_sigma": 3.1},
+    {"event_id": "delta_e14", "service_id": "ledger_svc", "timestamp_ms": 6070, "severity": "high", "metric_name": "5xx_rate", "metric_value": 0.20, "baseline_value": 0.005, "deviation_sigma": 4.2},
+    {"event_id": "delta_e15", "service_id": "webhook_svc", "timestamp_ms": 6080, "severity": "medium", "metric_name": "latency", "metric_value": 300.0, "baseline_value": 70.0, "deviation_sigma": 2.8},
+    {"event_id": "delta_e16", "service_id": "auth_proxy", "timestamp_ms": 6010, "severity": "medium", "metric_name": "error_rate", "metric_value": 0.08, "baseline_value": 0.005, "deviation_sigma": 2.5},
+    {"event_id": "delta_e17", "service_id": "ingress", "timestamp_ms": 9500, "severity": "high", "metric_name": "latency", "metric_value": 400.0, "baseline_value": 40.0, "deviation_sigma": 4.8},
+    {"event_id": "delta_e18", "service_id": "webhook_svc", "timestamp_ms": 9530, "severity": "medium", "metric_name": "error_rate", "metric_value": 0.12, "baseline_value": 0.01, "deviation_sigma": 2.6}
+  ],
+  "ground_truth": [
+    {"event_a": "delta_e01", "event_b": "delta_e02", "relationship": "causal"},
+    {"event_a": "delta_e02", "event_b": "delta_e03", "relationship": "causal"},
+    {"event_a": "delta_e02", "event_b": "delta_e04", "relationship": "causal"},
+    {"event_a": "delta_e03", "event_b": "delta_e05", "relationship": "causal"},
+    {"event_a": "delta_e04", "event_b": "delta_e05", "relationship": "causal"},
+    {"event_a": "delta_e03", "event_b": "delta_e06", "relationship": "causal"},
+    {"event_a": "delta_e05", "event_b": "delta_e07", "relationship": "causal"},
+    {"event_a": "delta_e06", "event_b": "delta_e08", "relationship": "causal"},
+    {"event_a": "delta_e07", "event_b": "delta_e08", "relationship": "causal"},
+    {"event_a": "delta_e09", "event_b": "delta_e10", "relationship": "independent"},
+    {"event_a": "delta_e09", "event_b": "delta_e11", "relationship": "independent"},
+    {"event_a": "delta_e09", "event_b": "delta_e12", "relationship": "independent"},
+    {"event_a": "delta_e09", "event_b": "delta_e13", "relationship": "independent"},
+    {"event_a": "delta_e09", "event_b": "delta_e14", "relationship": "independent"},
+    {"event_a": "delta_e09", "event_b": "delta_e15", "relationship": "independent"},
+    {"event_a": "delta_e09", "event_b": "delta_e16", "relationship": "independent"},
+    {"event_a": "delta_e10", "event_b": "delta_e12", "relationship": "independent"},
+    {"event_a": "delta_e11", "event_b": "delta_e12", "relationship": "independent"},
+    {"event_a": "delta_e12", "event_b": "delta_e14", "relationship": "independent"},
+    {"event_a": "delta_e13", "event_b": "delta_e15", "relationship": "independent"},
+    {"event_a": "delta_e16", "event_b": "delta_e10", "relationship": "independent"},
+    {"event_a": "delta_e16", "event_b": "delta_e11", "relationship": "independent"},
+    {"event_a": "delta_e17", "event_b": "delta_e18", "relationship": "independent"}
+  ]
+}

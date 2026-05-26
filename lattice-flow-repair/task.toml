@@ -1,0 +1,12 @@
+author_name = "Dhruvkumar Patel"
+author_email = "dhruvpatel2284@gmail.com"
+category = "distributed_systems"
+difficulty = "hard"
+tags = ["monitoring", "anomaly-detection", "causal-inference", "graph-analysis", "temporal-reasoning", "microservices"]
+difficulty_explanation = "Requires understanding of causal ordering in distributed systems where both structural reachability and temporal propagation constraints determine independence. The bug implements valid graph reachability logic but omits the timing feasibility check, producing false positives for structurally-connected but temporally-infeasible event pairs."
+solution_explanation = "The _check_independence method in correlator.py only checks structural reachability (whether a directed path exists between services). The fix adds temporal feasibility verification: even when a path exists, events are independent if the elapsed time between them is less than the minimum propagation delay along that path. This requires computing shortest-path delays via Dijkstra and comparing against actual time deltas."
+verification_explanation = "Tests validate specific event pair classifications where timing prevents causation despite path existence, plus aggregate precision/recall metrics. The buggy code produces false positives for rapid-succession events on connected services; the fixed code correctly identifies these as independent."
+expert_time_estimate_hours = 3.0
+
+[task]
+name = "lattice-flow-repair"
