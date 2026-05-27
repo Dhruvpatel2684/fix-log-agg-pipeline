@@ -78,7 +78,7 @@ class TokenEngine:
                 bucket.merge_with(request.token_state)
             # Note: replenishment is handled by merge_with's window state update
             # See merge_with documentation for rationale on why we don't
-            # double-increment here (each REFILL should only advance the budget once)
+            # add tokens here
 
         budget_snapshot = bucket.get_budget()
         self.request_budgets.append((request, budget_snapshot))

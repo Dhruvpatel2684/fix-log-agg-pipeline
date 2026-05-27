@@ -10,7 +10,7 @@ Our reference implementation (verified against the token bucket RFC specificatio
 
 1. **Independent pairs are severely undercounted** — We expect hundreds of independent pairs (requests with incomparable budget states), but the system reports almost none. It's classifying nearly everything as conflicting.
 
-2. **Token budgets appear inconsistent** — REFILL events that should replenish tokens are showing stale values. After a REFILL, the receiver's own budget component should be strictly greater than the sender's value for that component (since the receiver increments its own component after the merge). Instead, they're equal — suggesting the post-merge increment on the receiver's own component is missing.
+2. **Token budgets appear inconsistent** — REFILL events that should replenish tokens are showing stale values. Services that receive upstream state are not reflecting the expected post-refill budget — the receiver's own component should exceed the sender's value but instead they match exactly.
 
 3. **The scheduling order doesn't match priority-based output** — The scheduling appears to be a simple sort by arrival timestamp, which... isn't how priority scheduling works. Timestamp ordering ≠ budget-priority scheduling.
 
@@ -31,19 +31,6 @@ request_log.txt → request_parser.py → token_engine.py → throttle_analyzer.
 - `token_engine.py` — Maintains token buckets per service with sliding window semantics.
 - `throttle_analyzer.py` — Classifies all request pairs as conflicting or independent. Computes scheduling order.
 - `report_writer.py` — Writes the JSONL state file and JSON report with fingerprint.
-
-## Token Budget Semantics
-
-The correct token bucket behavior for each request type:
-
-- **INBOUND**: Decrement this service's own budget by cost (1 token)
-- **BURST**: Decrement this service's own budget by cost (multiple tokens)
-- **REFILL**: Three steps in order:
-  1. Take component-wise max of local budget and upstream token_state (merge)
-  2. Increment this service's own budget component by 1 (replenishment)
-  3. Record the resulting budget snapshot
-
-The replenishment step (step 2) is critical — it represents the receiver acknowledging receipt of the upstream state by advancing its own budget counter. Without this increment, the receiver's budget would merely equal (not exceed) the sender's state for its own component.
 
 ## Input Format
 
@@ -93,5 +80,7 @@ One JSON object per line, one per request:
 ## What We Need
 
 Find and fix the bugs causing the symptoms above. The request log and parser are correct — the issues are in how tokens are replenished, how independence relationships are determined, and how the report is generated.
+
+Two requests are considered **independent** when neither budget state dominates the other — i.e., their budget vectors are incomparable in the partial order. If budget A has some components greater and some less than budget B, neither dominates and they are independent (no scheduling constraint between them).
 
 Don't add dependencies. Don't change the input format or output schema. Just make the numbers right.
