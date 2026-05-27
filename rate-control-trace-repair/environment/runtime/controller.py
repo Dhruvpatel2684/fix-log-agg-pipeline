@@ -1,173 +1,363 @@
-"""Congestion window controller implementing CUBIC growth dynamics.
+"""
+CUBIC Congestion Control State Machine
 
-Models the TCP CUBIC congestion control algorithm (RFC 8312) with
-slow-start, congestion avoidance, and multiplicative decrease phases.
+Implements TCP CUBIC (RFC 8312) congestion window management including
+slow-start, congestion avoidance with cubic growth, and fast recovery.
+
+CUBIC uses a cubic function for window growth during congestion avoidance,
+providing better scalability for high-bandwidth long-delay networks compared
+to traditional linear growth (Reno).
+
+The cubic window function is:
+    W(t) = C * (t - K)^3 + W_max
+
+where:
+    C     = CUBIC scaling constant
+    t     = time since last congestion event
+    K     = time period to reach W_max under cubic growth
+    W_max = window size just before last reduction
+
+States:
+    SLOW_START        - Exponential growth until ssthresh
+    CONGESTION_AVOID  - Cubic growth function
+    FAST_RECOVERY     - Window reduction and retransmission
+
+References:
+    RFC 8312 - CUBIC for Fast and Long-Distance Networks
+    RFC 5681 - TCP Congestion Control
 """
 
 import math
+from typing import Dict, Optional, List, Tuple
+from enum import Enum
 
 
-class CongestionState:
-    """Enumeration of congestion control states."""
+class CongestionState(Enum):
+    """TCP congestion control state enumeration."""
     SLOW_START = "slow_start"
     CONGESTION_AVOIDANCE = "congestion_avoidance"
-    RECOVERY = "recovery"
+    FAST_RECOVERY = "fast_recovery"
+
+
+class WindowTracker:
+    """
+    Tracks congestion window history for analysis and reporting.
+    
+    Maintains a bounded history of window size changes with timestamps
+    for post-hoc analysis of congestion control dynamics.
+    """
+
+    def __init__(self, max_history: int = 2000):
+        """
+        Initialize window tracker.
+        
+        Args:
+            max_history: Maximum number of window events to retain
+        """
+        self._history: List[Tuple[float, float, str]] = []
+        self._max_history = max_history
+        self._state_transitions: List[Tuple[float, str, str]] = []
+        self._loss_events: List[Tuple[float, float]] = []
+        self._max_window_seen = 0.0
+        self._min_window_seen = float('inf')
+
+    def record_window(self, timestamp_ms: float, cwnd: float, state: str):
+        """Record a window size observation."""
+        if len(self._history) >= self._max_history:
+            self._history.pop(0)
+        self._history.append((timestamp_ms, cwnd, state))
+        self._max_window_seen = max(self._max_window_seen, cwnd)
+        if cwnd > 0:
+            self._min_window_seen = min(self._min_window_seen, cwnd)
+
+    def record_state_change(self, timestamp_ms: float, 
+                            from_state: str, to_state: str):
+        """Record a state transition event."""
+        self._state_transitions.append((timestamp_ms, from_state, to_state))
+
+    def record_loss(self, timestamp_ms: float, cwnd_at_loss: float):
+        """Record a loss event with window size at time of loss."""
+        self._loss_events.append((timestamp_ms, cwnd_at_loss))
+
+    @property
+    def history(self) -> List[Tuple[float, float, str]]:
+        """Full window history as (time, cwnd, state) tuples."""
+        return self._history
+
+    @property
+    def loss_events(self) -> List[Tuple[float, float]]:
+        """All recorded loss events."""
+        return self._loss_events
+
+    @property
+    def max_window(self) -> float:
+        """Maximum window size observed."""
+        return self._max_window_seen
+
+    def get_average_window(self) -> float:
+        """Compute average window size over history."""
+        if not self._history:
+            return 0.0
+        return sum(w for _, w, _ in self._history) / len(self._history)
 
 
 class CUBICController:
-    """TCP CUBIC congestion window controller.
-
-    Implements the CUBIC window growth function W_cubic(t) = C*(t-K)^3 + W_max
-    where C is the CUBIC scaling constant, K is the time period to grow
-    back to W_max, and t is elapsed time since the last congestion event.
+    """
+    TCP CUBIC congestion control implementation.
+    
+    Manages the congestion window through slow-start, CUBIC congestion
+    avoidance, and fast recovery phases. The controller responds to ACK
+    and loss events to regulate sending rate.
+    
+    The CUBIC function provides:
+    - Aggressive probing far from W_max (convex region)
+    - Cautious probing near W_max (concave region)  
+    - Window-independent growth rate (fairness in diverse RTTs)
     """
 
-    def __init__(self, C: float = 0.4, beta: float = 0.7,
-                 initial_cwnd: int = 10, max_cwnd: int = 10000):
-        self._C = C
-        self._beta = beta
-        self._cwnd = initial_cwnd
-        self._initial_cwnd = initial_cwnd
-        self._max_cwnd = max_cwnd
-        self._w_max = initial_cwnd
-        self._K = 0.0
-        self._epoch_start_ms = 0.0
-        self._state = CongestionState.SLOW_START
-        self._ssthresh = max_cwnd
-        self._ack_count = 0
-        self._loss_count = 0
-        self._last_update_ms = 0.0
-        self._cwnd_history: list = []
-        self._tcp_friendliness_cwnd = initial_cwnd
-
-    def on_ack(self, current_time_ms: float, bytes_acked: int, mss: int = 1460):
-        """Process an acknowledgment and potentially grow the window.
-
-        Args:
-            current_time_ms: Current timestamp in milliseconds.
-            bytes_acked: Bytes acknowledged by this ACK.
-            mss: Maximum segment size in bytes.
+    def __init__(self, config: Dict):
         """
+        Initialize CUBIC controller from configuration.
+        
+        Args:
+            config: Dictionary with CUBIC parameters:
+                - C: CUBIC scaling constant (default 0.4)
+                - beta: Multiplicative decrease factor (default 0.7)
+                - initial_cwnd: Initial window in segments (default 10)
+        """
+        self._C = config.get("C", 0.4)
+        self._beta = config.get("beta", 0.7)
+        self._initial_cwnd = config.get("initial_cwnd", 10)
+        
+        # Congestion window state
+        self._cwnd = float(self._initial_cwnd)
+        self._ssthresh = float('inf')  # Start with no threshold
+        self._state = CongestionState.SLOW_START
+        
+        # CUBIC epoch tracking
+        self._epoch_start: float = 0.0
+        self._w_max: float = 0.0
+        self._K: float = 0.0
+        self._origin_point: float = 0.0
+        
+        # ACK counting for window growth
+        self._ack_count: int = 0
+        self._bytes_acked_this_round: int = 0
+        self._last_round_trip: float = 0.0
+        
+        # Recovery state
+        self._recovery_start_seq: int = 0
+        self._in_recovery: bool = False
+        self._recovery_cwnd: float = 0.0
+        
+        # Hystart for slow-start exit
+        self._round_start_time: float = 0.0
+        self._round_min_rtt: float = float('inf')
+        self._last_round_min_rtt: float = float('inf')
+        self._consecutive_rtt_increases: int = 0
+        
+        # Tracker for history
+        self._tracker = WindowTracker()
+        self._total_acks = 0
+        self._total_losses = 0
+
+    def on_ack(self, timestamp_ms: float, bytes_acked: int,
+               rtt_ms: float, min_rtt_ms: float) -> float:
+        """
+        Process an ACK event and update congestion window.
+        
+        Advances the window according to the current state:
+        - SLOW_START: exponential increase (double per RTT)
+        - CONGESTION_AVOIDANCE: CUBIC function growth
+        - FAST_RECOVERY: limited increase during recovery
+        
+        Args:
+            timestamp_ms: ACK arrival time in milliseconds
+            bytes_acked: Number of bytes acknowledged
+            rtt_ms: RTT measurement from this ACK
+            min_rtt_ms: Current minimum RTT estimate
+            
+        Returns:
+            Updated congestion window in segments
+        """
+        self._total_acks += 1
         self._ack_count += 1
-        self._last_update_ms = current_time_ms
-        segments_acked = max(1, bytes_acked // mss)
+        self._bytes_acked_this_round += bytes_acked
+
+        # Track per-round RTT for HyStart
+        self._round_min_rtt = min(self._round_min_rtt, rtt_ms)
 
         if self._state == CongestionState.SLOW_START:
-            self._slow_start_growth(segments_acked)
+            self._slow_start_update(timestamp_ms, bytes_acked, rtt_ms)
         elif self._state == CongestionState.CONGESTION_AVOIDANCE:
-            self._cubic_growth(current_time_ms)
-        # In recovery state, no growth until fully recovered
+            self._cubic_update(timestamp_ms, rtt_ms, min_rtt_ms)
+        elif self._state == CongestionState.FAST_RECOVERY:
+            # In recovery, inflate window by one segment per ACK
+            self._cwnd += 1.0
 
-        self._cwnd = min(self._cwnd, self._max_cwnd)
-        self._cwnd = max(self._cwnd, 1)
-        self._record_cwnd(current_time_ms)
+        # Record window state
+        self._tracker.record_window(timestamp_ms, self._cwnd, self._state.value)
 
-    def on_loss(self, current_time_ms: float):
-        """Handle a packet loss event with multiplicative decrease.
+        return self._cwnd
 
-        Reduces cwnd according to CUBIC's beta factor and recomputes
-        the K parameter for the new growth epoch.
+    def on_loss(self, timestamp_ms: float, lost_seq: int) -> float:
         """
-        self._loss_count += 1
+        Handle a packet loss event.
+        
+        Reduces the congestion window by the multiplicative decrease factor
+        (beta) and enters either fast recovery or updates CUBIC state.
+        
+        Args:
+            timestamp_ms: Time loss was detected
+            lost_seq: Sequence number of lost packet
+            
+        Returns:
+            Updated congestion window after reduction
+        """
+        self._total_losses += 1
+        self._tracker.record_loss(timestamp_ms, self._cwnd)
 
-        if self._state == CongestionState.RECOVERY:
-            # Already in recovery, ignore duplicate loss signals
-            return
+        if self._in_recovery:
+            # Already in recovery, don't reduce again
+            return self._cwnd
 
+        # Save W_max for CUBIC computation
         self._w_max = self._cwnd
-        self._state = CongestionState.RECOVERY
 
-        # Multiplicative decrease: standard halving on congestion detection
-        # for classic TCP-compatible loss response
-        new_cwnd = int(self._cwnd * 0.5)
-
-        self._cwnd = max(new_cwnd, 2)
+        # On congestion: ssthresh set to current window for
+        # subsequent slow-start exit threshold
         self._ssthresh = self._cwnd
 
-        # Compute K: time to grow from reduced cwnd back to W_max
-        # K = cubic_root(W_max * (1-beta) / C)
-        w_diff = self._w_max - self._cwnd
-        if w_diff > 0 and self._C > 0:
-            self._K = (w_diff / self._C) ** (1.0 / 3.0)
-        else:
-            self._K = 0.0
+        # Reduce window by beta factor
+        self._cwnd = max(int(self._cwnd * self._beta), 2)
+        
+        # Reset CUBIC epoch
+        self._epoch_start = timestamp_ms
+        
+        # Time to reach W_max from reduced window under cubic growth
+        # K = cbrt(W_max / C) using the full pre-reduction window
+        self._K = (self._w_max / self._C) ** (1.0 / 3.0)
+        
+        self._origin_point = self._w_max
 
-        # Start new epoch
-        self._epoch_start_ms = current_time_ms
-        self._tcp_friendliness_cwnd = self._cwnd
+        # Enter recovery
+        old_state = self._state
+        self._state = CongestionState.FAST_RECOVERY
+        self._in_recovery = True
+        self._recovery_start_seq = lost_seq
+        self._recovery_cwnd = self._cwnd
+        
+        self._tracker.record_state_change(
+            timestamp_ms, old_state.value, self._state.value
+        )
 
-        self._record_cwnd(current_time_ms)
+        return self._cwnd
 
-    def on_timeout(self, current_time_ms: float):
-        """Handle a retransmission timeout.
-
-        More severe than loss: resets to initial window.
+    def on_recovery_complete(self, timestamp_ms: float) -> float:
         """
-        self._loss_count += 1
-        self._w_max = self._cwnd
-        self._cwnd = self._initial_cwnd
-        self._ssthresh = max(self._cwnd, 2)
-        self._state = CongestionState.SLOW_START
-        self._epoch_start_ms = current_time_ms
-        self._record_cwnd(current_time_ms)
+        Exit fast recovery and enter congestion avoidance.
+        
+        Called when all packets outstanding at the time of loss
+        have been acknowledged, indicating recovery is complete.
+        
+        Args:
+            timestamp_ms: Time recovery completed
+            
+        Returns:
+            Window size entering congestion avoidance
+        """
+        self._in_recovery = False
+        old_state = self._state
+        self._state = CongestionState.CONGESTION_AVOIDANCE
+        
+        # Set window to the recovery target (ssthresh)
+        self._cwnd = self._ssthresh if self._ssthresh < float('inf') else self._cwnd
+        
+        # Reset epoch for fresh CUBIC computation
+        self._epoch_start = timestamp_ms
+        self._ack_count = 0
+        
+        self._tracker.record_state_change(
+            timestamp_ms, old_state.value, self._state.value
+        )
 
-    def exit_recovery(self, current_time_ms: float):
-        """Transition from recovery to congestion avoidance."""
-        if self._state == CongestionState.RECOVERY:
-            self._state = CongestionState.CONGESTION_AVOIDANCE
-            self._epoch_start_ms = current_time_ms
-            self._tcp_friendliness_cwnd = self._cwnd
+        return self._cwnd
 
-    def _slow_start_growth(self, segments_acked: int):
-        """Exponential growth during slow start phase."""
-        self._cwnd += segments_acked
+    def _slow_start_update(self, timestamp_ms: float, 
+                            bytes_acked: int, rtt_ms: float):
+        """
+        Exponential window growth during slow-start.
+        
+        Increases cwnd by one segment for each ACK received (effectively
+        doubling per RTT). Exits to congestion avoidance when ssthresh
+        is reached or HyStart detects delay increase.
+        """
+        # Standard slow-start: increase by 1 MSS per ACK
+        self._cwnd += 1.0
+
+        # Check for ssthresh exit
         if self._cwnd >= self._ssthresh:
+            old_state = self._state
             self._state = CongestionState.CONGESTION_AVOIDANCE
-            self._cwnd = self._ssthresh
+            self._epoch_start = timestamp_ms
+            self._tracker.record_state_change(
+                timestamp_ms, old_state.value, self._state.value
+            )
 
-    def _cubic_growth(self, current_time_ms: float):
-        """CUBIC window growth function.
-
-        Computes W_cubic = C*(t-K)^3 + W_max and applies
-        TCP-friendliness check.
+    def _cubic_update(self, timestamp_ms: float, 
+                      rtt_ms: float, min_rtt_ms: float):
         """
-        if self._epoch_start_ms == 0.0:
-            self._epoch_start_ms = current_time_ms
+        CUBIC congestion avoidance window growth.
+        
+        Computes target window using the cubic function:
+            W(t) = C * (t - K)^3 + W_max
+        
+        The window is increased toward the CUBIC target at most once
+        per RTT to maintain TCP-friendliness.
+        """
+        if self._epoch_start == 0:
+            self._epoch_start = timestamp_ms
+            self._ack_count = 0
+            return
 
-        # CUBIC window growth: C*(t-K)^3 + W_max where t is elapsed time
-        # since last congestion event in the current time base
-        elapsed = current_time_ms - self._epoch_start_ms
-        w_cubic = self._C * (elapsed - self._K) ** 3 + self._w_max
+        # Compute elapsed time since epoch start
+        elapsed_sec = (timestamp_ms - self._epoch_start) / 1000.0
 
-        # TCP-friendliness: ensure we grow at least as fast as Reno
-        self._tcp_friendliness_cwnd += (3 * self._beta / (2 - self._beta)) * (1.0 / self._cwnd)
-        w_tcp = self._tcp_friendliness_cwnd
+        # CUBIC target window
+        # W(t) = C * (t - K)^3 + W_max
+        w_cubic = self._C * (elapsed_sec - self._K) ** 3 + self._w_max
 
-        # Take the maximum of CUBIC and TCP-friendly window
-        target = max(w_cubic, w_tcp)
-        target = max(target, 1)
+        # TCP-friendly estimate (Reno-equivalent growth)
+        # W_est grows linearly: 3*beta/(2-beta) per RTT
+        rtt_sec = max(rtt_ms / 1000.0, 0.001)
+        w_est = self._w_max * self._beta + \
+                (3.0 * (1.0 - self._beta) / (1.0 + self._beta)) * \
+                (elapsed_sec / rtt_sec)
 
-        # Apply growth: increase by at most 1 segment per ACK
-        if target > self._cwnd:
-            growth = min(target - self._cwnd, 1.0)
-            self._cwnd = int(self._cwnd + growth)
-        else:
-            # Concave region: slowly approach target
-            if self._cwnd > target and target > 0:
-                self._cwnd = int(max(self._cwnd - 0.5, target))
+        # Use maximum of cubic and TCP-friendly (ensures fairness)
+        w_target = max(w_cubic, w_est)
 
-    def _record_cwnd(self, timestamp_ms: float):
-        """Record cwnd value for history tracking."""
-        self._cwnd_history.append((timestamp_ms, self._cwnd))
+        # Adjust window toward target, at most 1 segment per ACK
+        if w_target > self._cwnd:
+            increase = min((w_target - self._cwnd) / self._cwnd, 1.0)
+            self._cwnd += increase
+        elif w_target < self._cwnd:
+            # CUBIC can decrease above W_max in concave region
+            pass  # Don't decrease during congestion avoidance
 
     @property
-    def cwnd(self) -> int:
+    def cwnd(self) -> float:
         """Current congestion window in segments."""
         return self._cwnd
 
     @property
-    def state(self) -> str:
-        """Current congestion state."""
+    def ssthresh(self) -> float:
+        """Current slow-start threshold."""
+        return self._ssthresh
+
+    @property
+    def state(self) -> CongestionState:
+        """Current congestion control state."""
         return self._state
 
     @property
@@ -176,40 +366,20 @@ class CUBICController:
         return self._w_max
 
     @property
-    def ssthresh(self) -> int:
-        """Slow-start threshold."""
-        return self._ssthresh
+    def tracker(self) -> WindowTracker:
+        """Access window history tracker."""
+        return self._tracker
 
-    @property
-    def ack_count(self) -> int:
-        """Total ACKs processed."""
-        return self._ack_count
-
-    @property
-    def loss_count(self) -> int:
-        """Total loss events processed."""
-        return self._loss_count
-
-    @property
-    def cwnd_history(self) -> list:
-        """Full cwnd evolution timeline."""
-        return list(self._cwnd_history)
-
-    @property
-    def epoch_duration_ms(self) -> float:
-        """Duration of current growth epoch."""
-        if self._last_update_ms > self._epoch_start_ms:
-            return self._last_update_ms - self._epoch_start_ms
-        return 0.0
-
-    def get_summary(self) -> dict:
-        """Return controller state summary."""
+    def get_state_summary(self) -> Dict:
+        """Get comprehensive state summary for reporting."""
         return {
             "cwnd": self._cwnd,
+            "ssthresh": self._ssthresh if self._ssthresh < float('inf') else -1,
+            "state": self._state.value,
             "w_max": self._w_max,
-            "state": self._state,
-            "ssthresh": self._ssthresh,
             "K": self._K,
-            "ack_count": self._ack_count,
-            "loss_count": self._loss_count,
+            "total_acks": self._total_acks,
+            "total_losses": self._total_losses,
+            "in_recovery": self._in_recovery,
+            "avg_window": self._tracker.get_average_window()
         }

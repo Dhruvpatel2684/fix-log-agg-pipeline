@@ -1,37 +1,17 @@
+[metadata]
 author_name = "Dhruvkumar Patel"
 author_email = "dhruvpatel2284@gmail.com"
 category = "networking"
 difficulty = "hard"
-tags = ["congestion-control", "tcp-cubic", "bandwidth-estimation", "pacing", "loss-detection"]
-
-difficulty_explanation = "Requires knowledge of TCP CUBIC (RFC 8312), EWMA conventions (RFC 6298), BBR pacing semantics, and network measurement methodology. Six bugs spanning bandwidth unit conversion, EWMA weight direction, CUBIC time-base, loss rate computation, pacing gain application, and multiplicative decrease factor — each requiring specific protocol expertise to identify and fix."
-solution_explanation = "Fix 1: Swap EWMA alpha weights (alpha for new sample per RFC 6298). Fix 2: Convert RTT ms to seconds for bandwidth calc. Fix 3: Convert elapsed ms to seconds for CUBIC growth. Fix 4: Use (lost+acked) denominator for loss rate. Fix 5: Multiply cwnd by gain instead of dividing. Fix 6: Change beta from 0.5 to 0.7 per RFC 8312."
-verification_explanation = "Tests verify RTT estimation accuracy, bandwidth magnitude, cwnd stability, loss rate precision, pacing probe behavior, and multiplicative decrease ratio across four trace scenarios."
-expert_time_estimate_hours = 3.0
+tags = ["congestion-control", "tcp-cubic", "bandwidth-estimation", "rtt-measurement", "network-analysis"]
 
 [task]
 name = "rate-control-trace-repair"
-description = "Fix 6 interacting defects in a TCP CUBIC congestion control trace replayer spanning RTT estimation, bandwidth measurement, window growth, loss detection, pacing, and multiplicative decrease."
+description = "Fix formula errors in a TCP CUBIC congestion control trace analysis pipeline that produces incorrect RTT estimates, bandwidth measurements, and link utilization reports."
+assets = ["environment"]
 
-[task.difficulty]
-level = "hard"
-reasoning = "Each bug requires specific TCP/networking domain knowledge to identify — EWMA convention, unit conversion, CUBIC time-base, loss measurement methodology, BBR pacing semantics, and CUBIC beta factor."
+[test]
+test_script = "tests/test.sh"
 
-[task.runtime]
-entrypoint = "python3 -m runtime.run_analysis"
-language = "python"
-dependencies = "stdlib-only"
-
-[task.validator]
-command = "bash tests/test.sh"
-description = "Replays traces and validates RTT estimates, bandwidth measurements, cwnd evolution, loss rates, and pacing behavior."
-
-[task.repair]
-command = "bash solution/solve.sh"
-description = "Patches estimator.py, controller.py, detector.py, and pacer.py to fix EWMA, units, CUBIC growth, loss rate, pacing, and beta factor, then re-runs analysis."
-
-[task.resources]
-timeout = 300
-cpu = 2
-memory = "2GB"
-disk = "1GB"
+[solution]
+solution_script = "solution/solve.sh"

@@ -1,210 +1,297 @@
-"""Entry point for congestion control trace replay analysis.
+"""
+Trace Replay Entry Point
 
-Loads configuration, reads trace files, replays each trace through the
-congestion control stack, and produces output reports.
+Orchestrates the full analysis pipeline:
+    1. Parse configuration
+    2. Load trace data files
+    3. Replay each trace through the congestion control stack
+    4. Aggregate results and generate report
+
+Trace format (pipe-delimited):
+    timestamp_ms|event_type|bytes_acked|rtt_ms|seq_num|flags
+
+Event types:
+    ACK  - Acknowledgment received
+    LOSS - Packet loss detected (timeout or triple-dupack)
+    SEND - Packet transmitted
+
+The replay engine processes events chronologically, feeding them
+through the estimator → controller → detector → pacer pipeline.
 """
 
-import configparser
 import os
 import sys
+import json
+import configparser
+from typing import Dict, List, Tuple, Optional
+
+# Add parent directory for imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from runtime.estimator import CombinedEstimator
-from runtime.controller import CUBICController, CongestionState
-from runtime.detector import CongestionDetector
-from runtime.pacer import PacingController, PacingPhase
-from runtime.reporter import AnalysisReport
+from runtime.controller import CUBICController
+from runtime.detector import LossDetector
+from runtime.pacer import PacingEngine
+from runtime.reporter import ReportGenerator
 
 
-def load_config(config_path: str = None) -> configparser.ConfigParser:
-    """Load analysis configuration from INI file."""
-    if config_path is None:
-        config_path = os.path.join(os.path.dirname(__file__), "config.ini")
-    config = configparser.ConfigParser()
-    config.read(config_path)
+def load_config(config_path: str) -> Dict:
+    """
+    Load and parse INI configuration file.
+    
+    Args:
+        config_path: Path to config.ini
+        
+    Returns:
+        Nested dictionary of configuration sections
+    """
+    parser = configparser.ConfigParser()
+    parser.read(config_path)
+
+    config = {}
+    for section in parser.sections():
+        config[section] = {}
+        for key, value in parser.items(section):
+            # Try numeric conversion
+            try:
+                if '.' in value:
+                    config[section][key] = float(value)
+                else:
+                    config[section][key] = int(value)
+            except ValueError:
+                config[section][key] = value
+
     return config
 
 
-def parse_trace_line(line: str) -> dict:
-    """Parse a single pipe-delimited trace line.
-
-    Format: timestamp_ms|event_type|seq_num|bytes_acked|rtt_sample_ms|extra
+def parse_trace_file(filepath: str) -> List[Dict]:
     """
-    parts = line.strip().split('|')
-    if len(parts) < 6:
-        return None
-    return {
-        'timestamp_ms': float(parts[0]),
-        'event_type': parts[1].strip(),
-        'seq_num': int(parts[2]),
-        'bytes_acked': int(parts[3]),
-        'rtt_sample_ms': float(parts[4]),
-        'extra': parts[5].strip() if len(parts) > 5 else '',
-    }
-
-
-def load_trace(trace_path: str) -> list:
-    """Load and parse a trace file."""
+    Parse a pipe-delimited trace file into event records.
+    
+    Skips comment lines (starting with #) and blank lines.
+    
+    Args:
+        filepath: Path to trace log file
+        
+    Returns:
+        List of event dictionaries
+    """
     events = []
-    with open(trace_path, 'r') as f:
+    
+    with open(filepath, 'r') as f:
         for line in f:
             line = line.strip()
             if not line or line.startswith('#'):
                 continue
-            event = parse_trace_line(line)
-            if event:
+
+            parts = line.split('|')
+            if len(parts) < 6:
+                continue
+
+            try:
+                event = {
+                    "timestamp_ms": float(parts[0]),
+                    "event_type": parts[1].strip(),
+                    "bytes_acked": int(parts[2]),
+                    "rtt_ms": float(parts[3]),
+                    "seq_num": int(parts[4]),
+                    "flags": parts[5].strip()
+                }
                 events.append(event)
+            except (ValueError, IndexError):
+                continue
+
     return events
 
 
-def replay_trace(events: list, config: configparser.ConfigParser) -> dict:
-    """Replay a trace through the congestion control stack.
-
-    Returns a dictionary of computed metrics for this trace.
+def replay_trace(trace_name: str, events: List[Dict],
+                 config: Dict) -> Dict:
     """
-    # Initialize components from config
-    estimator = CombinedEstimator(
-        alpha=config.getfloat('estimation', 'ewma_alpha'),
-        min_rtt_window_ms=config.getint('estimation', 'min_rtt_window_ms'),
-        bw_filter_len=config.getint('estimation', 'bw_filter_len'),
-    )
-    controller = CUBICController(
-        C=config.getfloat('cubic', 'C'),
-        beta=config.getfloat('cubic', 'beta'),
-        initial_cwnd=config.getint('cubic', 'initial_cwnd'),
-        max_cwnd=config.getint('cubic', 'max_cwnd'),
-    )
-    detector = CongestionDetector(
-        loss_window_ms=config.getfloat('detection', 'loss_window_ms'),
-        timeout_multiplier=config.getfloat('detection', 'timeout_multiplier'),
-    )
-    pacer = PacingController(
-        default_gain=config.getfloat('pacing', 'default_gain'),
-        probe_gain=config.getfloat('pacing', 'probe_gain'),
-        drain_gain=config.getfloat('pacing', 'drain_gain'),
-    )
+    Replay a single trace through the congestion control stack.
+    
+    Processes each event through the appropriate module based on
+    event type, tracking state evolution across the full pipeline.
+    
+    Args:
+        trace_name: Identifier for this trace
+        events: Parsed event list
+        config: Full configuration dictionary
+        
+    Returns:
+        Per-trace results dictionary
+    """
+    # Initialize pipeline components
+    estimator = CombinedEstimator(config.get("estimation", {}))
+    controller = CUBICController(config.get("cubic", {}))
+    detector = LossDetector(config.get("detection", {}))
+    pacer = PacingEngine(config.get("pacing", {}))
 
-    total_events = 0
-    pre_loss_cwnd = None
-    cruise_rate_before_probe = 0.0
-    max_probe_rate = 0.0
-    in_probe = False
-    immediate_post_loss_cwnd = None
-
-    for event in events:
-        total_events += 1
-        ts = event['timestamp_ms']
-        etype = event['event_type']
-        seq = event['seq_num']
-        bytes_acked = event['bytes_acked']
-        rtt_ms = event['rtt_sample_ms']
-
-        if etype == 'ACK':
-            estimator.process_ack(ts, bytes_acked, rtt_ms)
-            detector.on_ack(ts, seq)
-            controller.on_ack(ts, bytes_acked)
-            # Exit recovery after processing ACKs
-            if controller.state == CongestionState.RECOVERY:
-                controller.exit_recovery(ts)
-
-        elif etype == 'LOSS':
-            is_new = detector.on_loss(ts, seq)
-            if is_new:
-                pre_loss_cwnd = controller.cwnd
-                controller.on_loss(ts)
-                immediate_post_loss_cwnd = controller.cwnd
-
-        elif etype == 'TIMEOUT':
-            detector.on_timeout(ts)
-            controller.on_timeout(ts)
-
-        elif etype == 'PROBE_START':
-            # Record cruise rate just before entering probe
-            if pacer.current_rate > 0:
-                cruise_rate_before_probe = pacer.current_rate
-            pacer.set_phase(PacingPhase.PROBE_UP, ts)
-            in_probe = True
-
-        elif etype == 'PROBE_END':
-            pacer.set_phase(PacingPhase.CRUISE, ts)
-            in_probe = False
-
-        # Update pacing rate after each event
-        if estimator.srtt > 0:
-            rate = pacer.compute_pacing_rate(controller.cwnd, estimator.srtt)
-            if in_probe and rate > max_probe_rate:
-                max_probe_rate = rate
-
-    # Compile results
-    post_loss_cwnd = controller.cwnd
-    beta_ratio = 0.0
-    if pre_loss_cwnd and pre_loss_cwnd > 0:
-        beta_ratio = post_loss_cwnd / pre_loss_cwnd
-
-    # Compute probe gain ratio (max probe rate vs pre-probe cruise rate)
-    probe_gain_ratio = 0.0
-    if cruise_rate_before_probe > 0 and max_probe_rate > 0:
-        probe_gain_ratio = max_probe_rate / cruise_rate_before_probe
-
-    # Immediate reduction ratio at loss point
-    loss_reduction_ratio = 0.0
-    if pre_loss_cwnd and pre_loss_cwnd > 0 and immediate_post_loss_cwnd is not None:
-        loss_reduction_ratio = immediate_post_loss_cwnd / pre_loss_cwnd
-
-    result = {
-        'cwnd_final': controller.cwnd,
-        'bw_estimate': estimator.bandwidth,
-        'loss_rate': detector.get_loss_rate(),
-        'pacing_rate': pacer.current_rate,
-        'srtt': estimator.srtt,
-        'min_rtt': estimator.min_rtt,
-        'total_events': total_events,
-        'ack_count': controller.ack_count,
-        'loss_count': controller.loss_count,
-        'congestion_events': detector.congestion_event_count,
-        'pacing_gain': pacer.current_gain,
-        'beta_ratio': beta_ratio,
-        'pre_loss_cwnd': pre_loss_cwnd if pre_loss_cwnd else 0,
-        'post_loss_cwnd': post_loss_cwnd,
-        'probe_gain_ratio': probe_gain_ratio,
-        'cruise_rate_before_probe': cruise_rate_before_probe,
-        'max_probe_rate': max_probe_rate,
-        'loss_reduction_ratio': loss_reduction_ratio,
+    results = {
+        "trace": trace_name,
+        "events_processed": 0,
+        "acks_processed": 0,
+        "losses_detected": 0,
+        "sends_processed": 0,
+        "final_cwnd": 0.0,
+        "final_srtt": 0.0,
+        "max_cwnd": 0.0,
+        "delivery_rates": [],
+        "cwnd_history": [],
+        "srtt_history": [],
     }
-    return result
+
+    seq_counter = 0
+    
+    for event in events:
+        ts = event["timestamp_ms"]
+        etype = event["event_type"]
+        results["events_processed"] += 1
+
+        if etype == "ACK":
+            bytes_acked = event["bytes_acked"]
+            rtt_ms = event["rtt_ms"]
+            seq_num = event["seq_num"]
+
+            # Process through estimator
+            estimates = estimator.process_ack(ts, rtt_ms, bytes_acked)
+            
+            # Update controller
+            min_rtt = estimates["min_rtt"] if estimates["min_rtt"] else rtt_ms
+            cwnd = controller.on_ack(ts, bytes_acked, rtt_ms, min_rtt)
+            
+            # Check for losses via detector
+            losses = detector.on_ack(
+                ts, seq_num, estimates["srtt"], estimates["rttvar"]
+            )
+            
+            # Handle detected losses
+            for lost_seq, loss_type in losses:
+                controller.on_loss(ts, lost_seq)
+                results["losses_detected"] += 1
+            
+            # Update pacer with new rate
+            pacer.update_rate(cwnd, estimates["srtt"], ts)
+            
+            # Record state
+            results["acks_processed"] += 1
+            results["delivery_rates"].append(estimates["delivery_rate"])
+            results["cwnd_history"].append(cwnd)
+            results["srtt_history"].append(estimates["srtt"])
+            results["max_cwnd"] = max(results["max_cwnd"], cwnd)
+
+        elif etype == "LOSS":
+            seq_num = event["seq_num"]
+            cwnd = controller.on_loss(ts, seq_num)
+            results["losses_detected"] += 1
+            results["cwnd_history"].append(cwnd)
+
+        elif etype == "SEND":
+            seq_num = event["seq_num"]
+            bytes_sent = event["bytes_acked"]  # Reuse field for send size
+            detector.on_send(ts, seq_num, bytes_sent)
+            results["sends_processed"] += 1
+            seq_counter = max(seq_counter, seq_num)
+
+    # Record final state
+    results["final_cwnd"] = controller.cwnd
+    results["final_srtt"] = estimator.rtt_estimator.srtt
+    results["controller_summary"] = controller.get_state_summary()
+    results["detection_summary"] = detector.get_loss_summary()
+    results["pacing_summary"] = pacer.get_pacing_stats()
+
+    return results
 
 
-def main():
-    """Main entry point: load config, replay traces, write reports."""
-    config = load_config()
+def run_full_analysis(config_path: str = None) -> Dict:
+    """
+    Execute the complete trace analysis pipeline.
+    
+    Loads configuration, processes all configured traces, and
+    generates the aggregated report.
+    
+    Args:
+        config_path: Path to config.ini (default: adjacent to this file)
+        
+    Returns:
+        Complete analysis report dictionary
+    """
+    # Determine paths
+    runtime_dir = os.path.dirname(os.path.abspath(__file__))
+    if config_path is None:
+        config_path = os.path.join(runtime_dir, "config.ini")
+    
+    data_dir = os.path.join(runtime_dir, "data")
 
-    # Determine trace directory
-    data_dir = os.path.join(os.path.dirname(__file__), "data")
+    # Load configuration
+    config = load_config(config_path)
 
-    # Get active traces from config
-    active_traces = config.get('analysis', 'active_traces').split(',')
-    active_traces = [t.strip() for t in active_traces]
+    # Initialize reporter
+    reporter = ReportGenerator(config.get("reporting", {}))
 
-    report = AnalysisReport(
-        output_dir=config.get('analysis', 'output_dir')
-    )
+    # Get active traces
+    active_traces_str = config.get("analysis", {}).get("active_traces", "")
+    if isinstance(active_traces_str, str):
+        trace_names = [t.strip() for t in active_traces_str.split(",") if t.strip()]
+    else:
+        trace_names = []
 
-    for trace_name in active_traces:
+    all_results = {}
+
+    for trace_name in trace_names:
         trace_path = os.path.join(data_dir, f"{trace_name}.log")
+        
         if not os.path.exists(trace_path):
-            print(f"Warning: trace file not found: {trace_path}")
             continue
 
-        events = load_trace(trace_path)
-        result = replay_trace(events, config)
-        report.add_trace_result(trace_name, result)
-        print(f"Processed {trace_name}: {len(events)} events, "
-              f"cwnd={result['cwnd_final']}, bw={result['bw_estimate']:.2f}, "
-              f"loss={result['loss_rate']:.4f}")
+        # Parse and replay trace
+        events = parse_trace_file(trace_path)
+        if not events:
+            continue
 
-    report.write_output()
-    print(f"\nAnalysis complete. {report.trace_count} traces processed.")
-    print(f"Output written to: {config.get('analysis', 'output_dir')}")
+        results = replay_trace(trace_name, events, config)
+        all_results[trace_name] = results
+
+        # Feed results to reporter
+        flow = reporter.add_flow(trace_name)
+        for event in events:
+            if event["event_type"] == "ACK":
+                flow.record_ack(event["timestamp_ms"], event["bytes_acked"])
+                reporter.add_rtt_sample(event["rtt_ms"])
+            elif event["event_type"] == "LOSS":
+                flow.record_loss(event["timestamp_ms"], event.get("bytes_acked", 0))
+
+        reporter.add_controller_summary(results["controller_summary"])
+        reporter.add_detection_summary(results["detection_summary"])
+        reporter.add_pacing_summary(results["pacing_summary"])
+
+    # Generate and write report
+    report = reporter.generate_report()
+    report["trace_results"] = {
+        name: {
+            k: v for k, v in res.items() 
+            if k not in ("delivery_rates", "cwnd_history", "srtt_history")
+        }
+        for name, res in all_results.items()
+    }
+    
+    # Add condensed time series
+    report["time_series"] = {}
+    for name, res in all_results.items():
+        dr = res.get("delivery_rates", [])
+        cw = res.get("cwnd_history", [])
+        sr = res.get("srtt_history", [])
+        report["time_series"][name] = {
+            "delivery_rate_samples": dr[-50:] if len(dr) > 50 else dr,
+            "cwnd_samples": cw[-50:] if len(cw) > 50 else cw,
+            "srtt_samples": sr[-50:] if len(sr) > 50 else sr,
+        }
+
+    output_path = reporter.write_report(report)
+    report["_output_path"] = output_path
+
+    return report
 
 
 if __name__ == "__main__":
-    main()
+    report = run_full_analysis()
+    print(json.dumps(report, indent=2, default=str))
