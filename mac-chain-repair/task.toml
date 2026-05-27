@@ -1,0 +1,36 @@
+author_name = "Dhruvkumar Patel"
+author_email = "dhruvpatel2284@gmail.com"
+category = "cryptographic_verification"
+difficulty = "hard"
+tags = ["mac-verification", "hash-chain", "chain-integrity", "verification-analysis", "cryptography"]
+difficulty_explanation = "Requires understanding hash chain semantics: advancement on sync (merge then increment), non-conflicting as mutual non-dominance (neither chain dominates), and priority-based verification vs timestamp ordering. Bug 2 implements equality-based non-conflicting with a convincing symmetry justification. Bugs 2 and 3 require understanding the difference between total ordering and partial ordering (conflict DAG). The fingerprint test creates coupling that requires all bugs fixed simultaneously."
+solution_explanation = "The oracle re-processes events with correct chain advancement (increment own depth after merge), mutual non-dominance for non-conflicting (neither chain dominates the other), priority-based topological verification, and correct fingerprint computation."
+verification_explanation = "14 tests in 4 tiers: structural checks pass with buggy code, chain depth tests need Bug 1 fixed, non-conflicting/verification tests need Bugs 2-3 fixed, and fingerprint tests need all bugs fixed simultaneously."
+expert_time_estimate_hours = 2.5
+
+[task]
+name = "mac-chain-repair"
+description = "Debug a broken MAC chain verification system that incorrectly computes integrity decisions due to bugs in chain advancement, non-conflicting detection semantics, and verification logic."
+
+[task.difficulty]
+level = "hard"
+reasoning = "The core bug implements equality-based non-conflicting (both chains mutually dominate = equal) instead of incomparability-based non-conflicting (neither chain dominates). Both are valid interpretations with plausible justifications. The misleading docstring provides a convincing rationale for the symmetric criterion. Additionally, the advancement bug requires understanding merge-then-increment semantics, and the verification bug requires priority-based topological sort knowledge."
+
+[task.runtime]
+entrypoint = "python3 /app/runtime/mac_engine.py"
+language = "python"
+dependencies = "stdlib-only"
+
+[task.validator]
+command = "bash tests/test.sh"
+description = "Runs chain verification analysis and validates integrity correctness with pytest"
+
+[task.repair]
+command = "bash solution/solve.sh"
+description = "Patches all defects and re-runs analysis with correct chain states"
+
+[task.resources]
+timeout = 300
+cpu = 2
+memory = "2GB"
+disk = "1GB"

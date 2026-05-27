@@ -1,0 +1,35 @@
+# MAC Chain Verification Log - 5 authorities (auth_alpha, auth_beta, auth_gamma, auth_delta, auth_epsilon)
+# Format: TIMESTAMP|AUTHORITY|MSG_TYPE|PAYLOAD
+# TIMESTAMP: milliseconds (monotonic per authority)
+# MSG_TYPE: SIGN (single MAC, cost=1), BATCH (multi-MAC, cost=3), SYNC (peer chain merge)
+# SYNC events include peer_chain=auth_alpha:X,auth_beta:Y,...
+100|auth_alpha|SIGN|digest=sha256:a1b2c3,cost=1
+120|auth_beta|SIGN|digest=sha256:d4e5f6,cost=1
+150|auth_gamma|SIGN|digest=sha256:g7h8i9,cost=1
+180|auth_delta|SIGN|digest=sha256:j0k1l2,cost=1
+200|auth_epsilon|SIGN|digest=sha256:m3n4o5,cost=1
+250|auth_alpha|BATCH|digest=sha256:p6q7r8,cost=3
+300|auth_beta|SYNC|from=auth_alpha,msg_id=s01,peer_chain=auth_alpha:7,auth_beta:0,auth_gamma:0,auth_delta:0,auth_epsilon:0
+350|auth_gamma|BATCH|digest=sha256:s9t0u1,cost=4
+400|auth_alpha|SIGN|digest=sha256:v2w3x4,cost=1
+450|auth_delta|BATCH|digest=sha256:y5z6a7,cost=5
+500|auth_beta|SIGN|digest=sha256:b8c9d0,cost=1
+550|auth_epsilon|BATCH|digest=sha256:e1f2g3,cost=3
+600|auth_gamma|SYNC|from=auth_beta,msg_id=s02,peer_chain=auth_alpha:7,auth_beta:8,auth_gamma:0,auth_delta:0,auth_epsilon:0
+650|auth_alpha|BATCH|digest=sha256:h4i5j6,cost=3
+700|auth_delta|SIGN|digest=sha256:k7l8m9,cost=1
+750|auth_beta|BATCH|digest=sha256:n0o1p2,cost=4
+800|auth_epsilon|SYNC|from=auth_gamma,msg_id=s03,peer_chain=auth_alpha:7,auth_beta:8,auth_gamma:5,auth_delta:0,auth_epsilon:0
+850|auth_alpha|SIGN|digest=sha256:q3r4s5,cost=1
+900|auth_gamma|SIGN|digest=sha256:t6u7v8,cost=1
+950|auth_delta|SYNC|from=auth_epsilon,msg_id=s04,peer_chain=auth_alpha:7,auth_beta:8,auth_gamma:5,auth_delta:0,auth_epsilon:7
+1000|auth_beta|SIGN|digest=sha256:w9x0y1,cost=1
+1050|auth_alpha|SYNC|from=auth_delta,msg_id=s05,peer_chain=auth_alpha:7,auth_beta:8,auth_gamma:5,auth_delta:4,auth_epsilon:7
+1100|auth_epsilon|SIGN|digest=sha256:z2a3b4,cost=1
+1150|auth_gamma|BATCH|digest=sha256:c5d6e7,cost=2
+1200|auth_delta|SIGN|digest=sha256:f8g9h0,cost=1
+1250|auth_beta|SYNC|from=auth_alpha,msg_id=s06,peer_chain=auth_alpha:8,auth_beta:8,auth_gamma:5,auth_delta:4,auth_epsilon:7
+1300|auth_alpha|SIGN|digest=sha256:i1j2k3,cost=1
+1350|auth_epsilon|BATCH|digest=sha256:l4m5n6,cost=2
+1400|auth_gamma|SIGN|digest=sha256:o7p8q9,cost=1
+1450|auth_delta|BATCH|digest=sha256:r0s1t2,cost=3
