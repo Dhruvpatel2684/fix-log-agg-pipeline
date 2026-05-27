@@ -1,0 +1,35 @@
+# Rate Limit Request Log - 5 services (svc_alpha, svc_beta, svc_gamma, svc_delta, svc_epsilon)
+# Format: TIMESTAMP|SERVICE|REQUEST_TYPE|PAYLOAD
+# TIMESTAMP: milliseconds (monotonic per service)
+# REQUEST_TYPE: INBOUND, BURST, REFILL
+# PAYLOAD: key=value pairs. REFILL events include token_state=svc_alpha:X,svc_beta:Y,...
+100|svc_alpha|INBOUND|endpoint=/api/users,cost=1
+120|svc_beta|INBOUND|endpoint=/api/items,cost=1
+150|svc_gamma|INBOUND|endpoint=/api/search,cost=1
+180|svc_delta|INBOUND|endpoint=/api/metrics,cost=1
+200|svc_epsilon|INBOUND|endpoint=/api/health,cost=1
+250|svc_alpha|BURST|endpoint=/api/upload,cost=3
+300|svc_beta|REFILL|from=svc_alpha,msg_id=r01,token_state=svc_alpha:7,svc_beta:0,svc_gamma:0,svc_delta:0,svc_epsilon:0
+350|svc_gamma|BURST|endpoint=/api/analytics,cost=4
+400|svc_alpha|INBOUND|endpoint=/api/users,cost=1
+450|svc_delta|BURST|endpoint=/api/export,cost=5
+500|svc_beta|INBOUND|endpoint=/api/items,cost=1
+550|svc_epsilon|BURST|endpoint=/api/batch,cost=3
+600|svc_gamma|REFILL|from=svc_beta,msg_id=r02,token_state=svc_alpha:7,svc_beta:8,svc_gamma:0,svc_delta:0,svc_epsilon:0
+650|svc_alpha|BURST|endpoint=/api/upload,cost=3
+700|svc_delta|INBOUND|endpoint=/api/metrics,cost=1
+750|svc_beta|BURST|endpoint=/api/stream,cost=4
+800|svc_epsilon|REFILL|from=svc_gamma,msg_id=r03,token_state=svc_alpha:7,svc_beta:8,svc_gamma:5,svc_delta:0,svc_epsilon:0
+850|svc_alpha|INBOUND|endpoint=/api/users,cost=1
+900|svc_gamma|INBOUND|endpoint=/api/search,cost=1
+950|svc_delta|REFILL|from=svc_epsilon,msg_id=r04,token_state=svc_alpha:7,svc_beta:8,svc_gamma:5,svc_delta:0,svc_epsilon:7
+1000|svc_beta|INBOUND|endpoint=/api/items,cost=1
+1050|svc_alpha|REFILL|from=svc_delta,msg_id=r05,token_state=svc_alpha:7,svc_beta:8,svc_gamma:5,svc_delta:4,svc_epsilon:7
+1100|svc_epsilon|INBOUND|endpoint=/api/health,cost=1
+1150|svc_gamma|BURST|endpoint=/api/analytics,cost=2
+1200|svc_delta|INBOUND|endpoint=/api/metrics,cost=1
+1250|svc_beta|REFILL|from=svc_alpha,msg_id=r06,token_state=svc_alpha:8,svc_beta:8,svc_gamma:5,svc_delta:4,svc_epsilon:7
+1300|svc_alpha|INBOUND|endpoint=/api/users,cost=1
+1350|svc_epsilon|BURST|endpoint=/api/batch,cost=2
+1400|svc_gamma|INBOUND|endpoint=/api/search,cost=1
+1450|svc_delta|BURST|endpoint=/api/export,cost=3
