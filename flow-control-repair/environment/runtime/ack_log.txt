@@ -1,0 +1,35 @@
+# Flow Control ACK Log - 5 connections (conn_alpha, conn_beta, conn_gamma, conn_delta, conn_epsilon)
+# Format: TIMESTAMP|CONNECTION|ACK_TYPE|PAYLOAD
+# TIMESTAMP: milliseconds (monotonic per connection)
+# ACK_TYPE: DATA (consume window), DUPLEX (consume multiple), SACK (selective ack from peer)
+# SACK events include peer_window=conn_alpha:X,conn_beta:Y,...
+100|conn_alpha|DATA|segment=/stream/video,cost=1
+120|conn_beta|DATA|segment=/stream/audio,cost=1
+150|conn_gamma|DATA|segment=/stream/telemetry,cost=1
+180|conn_delta|DATA|segment=/stream/control,cost=1
+200|conn_epsilon|DATA|segment=/stream/signaling,cost=1
+250|conn_alpha|DUPLEX|segment=/stream/upload,cost=3
+300|conn_beta|SACK|from=conn_alpha,msg_id=s01,peer_window=conn_alpha:7,conn_beta:0,conn_gamma:0,conn_delta:0,conn_epsilon:0
+350|conn_gamma|DUPLEX|segment=/stream/bulk,cost=4
+400|conn_alpha|DATA|segment=/stream/video,cost=1
+450|conn_delta|DUPLEX|segment=/stream/migration,cost=5
+500|conn_beta|DATA|segment=/stream/audio,cost=1
+550|conn_epsilon|DUPLEX|segment=/stream/sync,cost=3
+600|conn_gamma|SACK|from=conn_beta,msg_id=s02,peer_window=conn_alpha:7,conn_beta:8,conn_gamma:0,conn_delta:0,conn_epsilon:0
+650|conn_alpha|DUPLEX|segment=/stream/upload,cost=3
+700|conn_delta|DATA|segment=/stream/control,cost=1
+750|conn_beta|DUPLEX|segment=/stream/multiplex,cost=4
+800|conn_epsilon|SACK|from=conn_gamma,msg_id=s03,peer_window=conn_alpha:7,conn_beta:8,conn_gamma:5,conn_delta:0,conn_epsilon:0
+850|conn_alpha|DATA|segment=/stream/video,cost=1
+900|conn_gamma|DATA|segment=/stream/telemetry,cost=1
+950|conn_delta|SACK|from=conn_epsilon,msg_id=s04,peer_window=conn_alpha:7,conn_beta:8,conn_gamma:5,conn_delta:0,conn_epsilon:7
+1000|conn_beta|DATA|segment=/stream/audio,cost=1
+1050|conn_alpha|SACK|from=conn_delta,msg_id=s05,peer_window=conn_alpha:7,conn_beta:8,conn_gamma:5,conn_delta:4,conn_epsilon:7
+1100|conn_epsilon|DATA|segment=/stream/signaling,cost=1
+1150|conn_gamma|DUPLEX|segment=/stream/bulk,cost=2
+1200|conn_delta|DATA|segment=/stream/control,cost=1
+1250|conn_beta|SACK|from=conn_alpha,msg_id=s06,peer_window=conn_alpha:8,conn_beta:8,conn_gamma:5,conn_delta:4,conn_epsilon:7
+1300|conn_alpha|DATA|segment=/stream/video,cost=1
+1350|conn_epsilon|DUPLEX|segment=/stream/sync,cost=2
+1400|conn_gamma|DATA|segment=/stream/telemetry,cost=1
+1450|conn_delta|DUPLEX|segment=/stream/migration,cost=3

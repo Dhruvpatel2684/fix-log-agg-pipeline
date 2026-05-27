@@ -1,0 +1,36 @@
+author_name = "Dhruvkumar Patel"
+author_email = "dhruvpatel2284@gmail.com"
+category = "protocol_engineering"
+difficulty = "hard"
+tags = ["flow-control", "congestion-window", "sliding-window", "tcp-analysis", "networking"]
+difficulty_explanation = "Requires understanding congestion window semantics: advancement on SACK (merge then increment), contention-free as mutual non-dominance (neither window dominates), and priority-based scheduling vs timestamp ordering. Bug 2 implements equality-based contention-free with a convincing symmetry justification. Bugs 2 and 3 require understanding the difference between total ordering and partial ordering (competing DAG). The fingerprint test creates coupling that requires all bugs fixed simultaneously."
+solution_explanation = "The oracle re-processes packets with correct window advancement (increment own window after merge), mutual non-dominance for contention-free (neither window dominates the other), priority-based topological scheduling, and correct fingerprint computation."
+verification_explanation = "14 tests in 4 tiers: structural checks pass with buggy code, window value tests need Bug 1 fixed, contention-free/scheduling tests need Bugs 2-3 fixed, and fingerprint tests need all bugs fixed simultaneously."
+expert_time_estimate_hours = 2.5
+
+[task]
+name = "flow-control-repair"
+description = "Debug a broken TCP-like flow control window manager that incorrectly computes congestion decisions due to bugs in window advancement, contention-free detection semantics, and scheduling logic."
+
+[task.difficulty]
+level = "hard"
+reasoning = "The core bug implements equality-based contention-free (both windows mutually dominate = equal) instead of incomparability-based contention-free (neither window dominates). Both are valid interpretations with plausible justifications. The misleading docstring provides a convincing rationale for the symmetric criterion. Additionally, the advancement bug requires understanding merge-then-increment semantics, and the scheduling bug requires priority-based topological sort knowledge."
+
+[task.runtime]
+entrypoint = "python3 /app/runtime/flow_engine.py"
+language = "python"
+dependencies = "stdlib-only"
+
+[task.validator]
+command = "bash tests/test.sh"
+description = "Runs congestion analysis and validates scheduling correctness with pytest"
+
+[task.repair]
+command = "bash solution/solve.sh"
+description = "Patches all defects and re-runs analysis with correct congestion windows"
+
+[task.resources]
+timeout = 300
+cpu = 2
+memory = "2GB"
+disk = "1GB"
